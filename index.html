@@ -117,11 +117,11 @@ const DEFAULT_TOPICS = [
 ];
 // titulky jdou přepsat v panelu (jeden na řádek); úprava se pamatuje v prohlížeči
 let TOPICS = DEFAULT_TOPICS;
+// prázdné pole = obálka bez textu (jen pozadí, prvky a logo); null vrátí původní titulky
 function setTopics(text) {
-  const lines = text.split('\n').map(s => s.trim()).filter(Boolean);
-  TOPICS = lines.length ? lines : DEFAULT_TOPICS;
+  TOPICS = text === null ? DEFAULT_TOPICS : text.split('\n').map(s => s.trim()).filter(Boolean);
   try {
-    if (TOPICS === DEFAULT_TOPICS || TOPICS.join('\n') === DEFAULT_TOPICS.join('\n')) localStorage.removeItem('eduamag-titulky');
+    if (TOPICS.join('\n') === DEFAULT_TOPICS.join('\n')) localStorage.removeItem('eduamag-titulky');
     else localStorage.setItem('eduamag-titulky', TOPICS.join('\n'));
   } catch (e) { /* bez úložiště se úprava jen nezapamatuje */ }
 }
@@ -617,10 +617,11 @@ function generate(newSeed) {
   // místo pod logem je obsazené: prvky koláže se mu vyhnou, text pod nálepkami prostě zmizí
   const logoBox = LOGO && P.logo !== 'ne' ? LOGO.box : null;
   if (logoBox) placedBoxes.push(logoBox);
-  density = Math.min(1, Math.max(0.5, (n - emptyRows.size) / Math.max(1, elCount)));
+  const hasText = TOPICS.length > 0;
+  density = hasText ? Math.min(1, Math.max(0.5, (n - emptyRows.size) / Math.max(1, elCount))) : 1;
   const allGaps = [];
   let rowsLeft = n - emptyRows.size;
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; hasText && i < n; i++) {
     if (emptyRows.has(i)) continue;
     const fontKey = serifRows.has(i) ? 'serif' : sansKey;
     const cap = capHeight(fontKey);
@@ -693,7 +694,8 @@ function generate(newSeed) {
   }
 
   // co se nevešlo do věty, doplníme do volného místa na řádku: nejdřív v plné velikosti,
-  // pak postupně menší; až když není kam, položí se prvek přes text
+  // pak postupně menší; až když není kam, položí se prvek přes text.
+  // Bez titulků se takhle – volně po řádcích – rozmístí všechny prvky.
   const gapsBySize = shuffle(allGaps).sort((a, b) => (b.x2 - b.x1) - (a.x2 - a.x1));
   toPlace.forEach(e => {
     for (let shrink = 1; shrink > 0.35; shrink *= 0.8) {
@@ -710,7 +712,7 @@ function generate(newSeed) {
       }
     }
     for (let t = 0; t < 300; t++) {
-      const size = elementSize(e, rowH * 0.75, rowH, true, 1 - 0.7 * t / 300);
+      const size = elementSize(e, rowH * 0.75, rowH, hasText, 1 - 0.7 * t / 300);
       const cx = rnd(TRIM_L + size.w / 2, TRIM_R - size.w / 2), cy = (rint(0, n - 1) + 0.5) * rowH;
       if (boxFree(cx, cy, size) || t === 299) return placeElement(gEl, e, cx, cy, size);
     }
@@ -836,10 +838,10 @@ function buildPanel() {
   $('panel').addEventListener('click', e => { const b = e.target.closest('button'); if (b && e.detail > 0) b.blur(); });
 
   const ta = $('titulky');
-  try { const saved = localStorage.getItem('eduamag-titulky'); if (saved) setTopics(saved); } catch (e) { /* bez úložiště */ }
+  try { const saved = localStorage.getItem('eduamag-titulky'); if (saved !== null) setTopics(saved); } catch (e) { /* bez úložiště */ }
   ta.value = TOPICS.join('\n');
   ta.addEventListener('input', () => { setTopics(ta.value); generate(seed); });
-  $('titulky-reset').addEventListener('click', () => { setTopics(''); ta.value = TOPICS.join('\n'); generate(seed); });
+  $('titulky-reset').addEventListener('click', () => { setTopics(null); ta.value = TOPICS.join('\n'); generate(seed); });
 }
 // panel ukazuje, co je nastavené ručně, a u „náhodně“ to, co vybrala varianta
 function syncPanel() {
