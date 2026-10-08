@@ -149,7 +149,7 @@ const FONTS = {};
 // null = „náhodně“: hodnotu určí číslo varianty jako dřív. Co je nastavené ručně,
 // drží i při přepínání variant a zapisuje se do adresy za číslo (#406329&radky=7).
 // kompozice prvků na obálce bez titulků (viz composeFree)
-const LAYOUTS = { rozptyl: 'rozptyl', hromada: 'hromada', kruh: 'kruh', proud: 'proud', mrizka: 'mřížka', hrdina: 'hrdina' };
+const LAYOUTS = { rozptyl: 'rozptyl', hromada: 'hromada', kruh: 'kruh', proud: 'proud', mrizka: 'mřížka', hrdina: 'hrdina', pas: 'pás shluků' };
 const CONTROLS = [
   { sec: 'Text' },
   { k: 'radky', label: 'Počet řádků', min: 4, max: 20, step: 1 },
@@ -183,6 +183,7 @@ const CONTROLS = [
   { k: 'zrno', label: 'Zrno a prach', tri: true },
   // „fixed“ = vrstva se nelosuje, jde jen vypnout (logo je to jediné, co se mezi variantami nemění)
   { k: 'logo', label: 'Logo', tri: true, fixed: true },
+  { k: 'nalepky', label: 'Nálepky pod logem', tri: true, fixed: true },
 ];
 const P = {};
 CONTROLS.forEach(c => { if (c.k) P[c.k] = null; });
@@ -241,6 +242,7 @@ function buildLogo(logo, back) {
   const lw = logo.img.naturalWidth, lh = logo.img.naturalHeight, x = W / 2, y = BLEED;
   // plocha, které se prvky koláže vyhnou
   const L = { href: logo.href, x, y, w: lw, h: lh, back: null, box: { x1: x, x2: W, y1: 0, y2: y + lh } };
+  L.boxPlain = L.box; // plocha samotného loga, bez nálepek
   if (back) {
     const bw = back.img.naturalWidth, bh = back.img.naturalHeight;
     L.back = { href: back.href, x: x + LOGO_BACK_DX, y: y + LOGO_BACK_DY, w: bw, h: bh };
@@ -248,9 +250,9 @@ function buildLogo(logo, back) {
   }
   return L;
 }
-function drawLogo() {
+function drawLogo(stickers) {
   const g = el('g', { id: 'logo' }, svg);
-  const b = LOGO.back;
+  const b = stickers && LOGO.back;
   if (b) el('image', { href: b.href, x: b.x, y: b.y, width: b.w, height: b.h }, g);
   el('image', { href: LOGO.href, x: LOGO.x, y: LOGO.y, width: LOGO.w, height: LOGO.h }, g);
 }
@@ -286,7 +288,9 @@ function placeElement(g, e, cx, cy, size, rot = rnd(-4, 4)) {
 // Když nejsou titulky, prvky se neřadí do pomyslných řádků, ale skládají se do jedné z volných kompozic.
 function composeFree(g, items, kind, logoBox) {
   const N = items.length;
-  if (!N) return;
+  const spots = []; // kam co přišlo – k tomu se pak přimknou koule, odznak, čmáranice a tečky
+  if (!N) return spots;
+  const put = (e, cx, cy, s, rot) => { placeElement(g, e, cx, cy, s, rot); spots.push({ cx, cy, s }); };
   const X0 = TRIM_L, X1 = TRIM_R, Y0 = BLEED + 80, Y1 = H - BLEED - 80, SW = X1 - X0, SH = Y1 - Y0;
   const cell = Math.sqrt(SW * SH * 0.8 / N); // strana plochy, která připadá na jeden prvek
   const sized = (e, h, maxW = Infinity) => { h = Math.min(h, maxW / e.ratio); return { h, w: h * e.ratio }; };
@@ -305,10 +309,10 @@ function composeFree(g, items, kind, logoBox) {
     for (let t = 0; t < 400; t++) {
       const s = sized(e, h0 * (1 - 0.6 * t / 400), cell * 1.6);
       const cx = clampX(xOf(s, t), s), cy = rnd(Y0 + s.h / 2, Y1 - s.h / 2);
-      if (boxFree(cx, cy, s)) return placeElement(g, e, cx, cy, s, rnd(-rotMax, rotMax));
+      if (boxFree(cx, cy, s)) return put(e, cx, cy, s, rnd(-rotMax, rotMax));
       if (!onLogo(cx, cy, s, 0)) last = { cx, cy, s };
     }
-    if (last) placeElement(g, e, last.cx, last.cy, last.s, rnd(-rotMax, rotMax));
+    if (last) put(e, last.cx, last.cy, last.s, rnd(-rotMax, rotMax));
   });
 
   if (kind === 'hrdina') {
@@ -316,7 +320,7 @@ function composeFree(g, items, kind, logoBox) {
     const [hero, ...rest] = items;
     const s = sized(hero, Math.min(H * rnd(0.5, 0.68) * Math.min(1.15, Math.max(0.8, elScale)), Y1 - topY), SW * 0.45);
     const cx = clampX(frontX(), s), cy = Math.max(clampY(frontY(), s), topY + s.h / 2);
-    placeElement(g, hero, cx, cy, s, rnd(-8, 8));
+    put(hero, cx, cy, s, rnd(-8, 8));
     scatter(rest, () => cell * rnd(0.28, 0.5) * elScale, 20, () => cx + (rnd(-1, 1) + rnd(-1, 1)) * SW * 0.26);
   } else if (kind === 'hromada') {
     // spirála od středu: uprostřed největší, ke kraji menší; prvky se smějí překrývat
@@ -328,7 +332,7 @@ function composeFree(g, items, kind, logoBox) {
     }).reverse().forEach(p => {
       p.cx = clampX(p.cx, p.s); p.cy = clampY(p.cy, p.s);
       for (let t = 0; t < 80 && onLogo(p.cx, p.cy, p.s); t++) { p.cx = clampX(p.cx - 40, p.s); p.cy = clampY(p.cy + 25, p.s); }
-      placeElement(g, p.e, p.cx, p.cy, p.s, rnd(-25, 25));
+      put(p.e, p.cx, p.cy, p.s, rnd(-25, 25));
     });
   } else if (kind === 'kruh') {
     // elipsa přes desky; místa, která by zasáhla do loga, se vynechají – kruh se o logo opře
@@ -341,10 +345,10 @@ function composeFree(g, items, kind, logoBox) {
     }
     const arc = Math.PI * 2 * Math.sqrt((rx * rx + ry * ry) / 2) * free.length / 90 / ring.length;
     const hSlot = Math.min(arc * 0.6, cell * 0.6) * elScale;
-    if (ring !== items) placeElement(g, items[0], ex, ey, sized(items[0], ry * rnd(0.7, 0.95), rx * 1.1), rnd(-10, 10));
+    if (ring !== items) put(items[0], ex, ey, sized(items[0], ry * rnd(0.7, 0.95), rx * 1.1), rnd(-10, 10));
     ring.forEach((e, i) => {
       const p = free[Math.floor((i + 0.5) * free.length / ring.length)], s = sized(e, hSlot * rnd(0.8, 1.15), hSlot * 1.6);
-      placeElement(g, e, clampX(p.cx, s), clampY(p.cy, s), s, rnd(-12, 12));
+      put(e, clampX(p.cx, s), clampY(p.cy, s), s, rnd(-12, 12));
     });
   } else if (kind === 'proud') {
     // vlnovka přes celé desky, prvky se lehce překrývají; velikost po cestě roste nebo klesá
@@ -362,7 +366,7 @@ function composeFree(g, items, kind, logoBox) {
       let cy = clampY(y0 + amp * Math.sin(w), s);
       if (onLogo(cx, cy, s)) cy = clampY(logoBox.y2 + 60 + s.h / 2, s);
       const slope = Math.atan(amp * Math.cos(w) * waves * Math.PI * 2 / SW) * 180 / Math.PI;
-      placeElement(g, e, cx, cy, s, slope * 0.7 + rnd(-6, 6));
+      put(e, cx, cy, s, slope * 0.7 + rnd(-6, 6));
       x += s.w * STEP;
     });
   } else if (kind === 'mrizka') {
@@ -379,10 +383,35 @@ function composeFree(g, items, kind, logoBox) {
       cells.sort((a, b) => b.cx - a.cx || a.cy - b.cy);
       items.forEach((e, i) => {
         const c = cells[i], s = sized(e, ch * 0.62 * Math.min(1, elScale), cw * 0.78);
-        placeElement(g, e, c.cx + rnd(-0.04, 0.04) * cw, c.cy + rnd(-0.04, 0.04) * ch, s, rnd(-3, 3));
+        put(e, c.cx + rnd(-0.04, 0.04) * cw, c.cy + rnd(-0.04, 0.04) * ch, s, rnd(-3, 3));
       });
       break;
     }
+  } else if (kind === 'pas') {
+    // pás shluků přes obě strany: v každém shluku jeden velký prvek a pár menších, které se o něj
+    // opírají nebo jsou zasunuté pod něj; jeden až dva prvky se zopakují v jiné velikosti (ozvěna)
+    const echo = shuffle(items).slice(0, Math.min(N, rint(1, 2)));
+    const list = shuffle([...items, ...echo]), groups = [];
+    for (let i = 0; i < list.length;) { const n = Math.min(list.length - i, rint(2, 4)); groups.push(list.slice(i, i + n)); i += n; }
+    const G = groups.length, tilt = rnd(-0.14, 0.14) * H, amp = H * rnd(0.04, 0.12), ph = rnd(0, Math.PI * 2), yc = H * rnd(0.5, 0.6);
+    groups.forEach((grp, gi) => {
+      const t = (gi + 0.5) / G + rnd(-0.03, 0.03);
+      const lead = sized(grp[0], Math.min(cell * rnd(0.8, 1.3) * elScale, SH * 0.42), SW / G * 1.25);
+      const gx = clampX(X0 + SW * (0.06 + 0.88 * t), lead);
+      let gy = clampY(yc + tilt * (t - 0.5) * 2 + amp * Math.sin(ph + t * Math.PI * 2), lead);
+      if (onLogo(gx, gy, lead)) gy = clampY(topY + lead.h / 2, lead);
+      const rest = grp.slice(1).map(e => {
+        const s = sized(e, cell * rnd(0.3, 0.6) * elScale, cell), a = rnd(0, Math.PI * 2);
+        const cx = clampX(gx + Math.cos(a) * (lead.w / 2 + s.w * 0.15), s);
+        let cy = clampY(gy + Math.sin(a) * (lead.h / 2 + s.h * 0.15), s);
+        for (let k = 0; k < 60 && onLogo(cx, cy, s); k++) cy = clampY(cy + 30, s);
+        return { e, s, cx, cy, under: chance(0.35) };
+      });
+      rest.filter(q => q.under).forEach(q => put(q.e, q.cx, q.cy, q.s, rnd(-25, 25)));
+      put(grp[0], gx, gy, lead, rnd(-20, 20));
+      rest.filter(q => !q.under).forEach(q => put(q.e, q.cx, q.cy, q.s, rnd(-25, 25)));
+    });
+    spots.extra = echo.length;
   } else {
     // rozptyl: pár velkých, hodně malých, volně po ploše; velké se drží titulní strany
     const hs = new Map(items.map(e => [e, cell * (chance(0.3) ? rnd(0.75, 1.1) : rnd(0.32, 0.6)) * elScale]));
@@ -390,6 +419,7 @@ function composeFree(g, items, kind, logoBox) {
     scatter(bySize.filter(isBig), e => hs.get(e), 20, (s, t) => frontX() + rnd(-1, 1) * SW * (0.1 + 0.5 * t / 400));
     scatter(bySize.filter(e => !isBig(e)), e => hs.get(e), 20);
   }
+  return spots;
 }
 
 // ─── RNG ──────────────────────────────────────────────────────────────────────
@@ -585,7 +615,7 @@ function badge(g, S) {
     const a = (i / (n * 2)) * Math.PI * 2, rr = i % 2 ? r * rnd(0.7, 0.8) : r * rnd(0.98, 1.1);
     pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]);
   }
-  el('path', { d: smoothPath(pts, true), fill: S.badge, stroke: S.badgeLine, 'stroke-width': 3, 'stroke-opacity': 0.8 }, g);
+  return { cx, cy, node: el('path', { d: smoothPath(pts, true), fill: S.badge, stroke: S.badgeLine, 'stroke-width': 3, 'stroke-opacity': 0.8 }, g) };
 }
 
 function scribble(g, S) {
@@ -595,14 +625,14 @@ function scribble(g, S) {
     const a = (i / n) * turns * Math.PI * 2, k = rnd(0.5, 1.1);
     pts.push([cx + Math.cos(a) * rx * k + i * rnd(-15, 25), cy + Math.sin(a) * ry * k]);
   }
-  el('path', { d: smoothPath(pts, false), fill: 'none', stroke: S.ink, 'stroke-width': 4, 'stroke-linecap': 'round', opacity: 0.85 }, g);
+  return { cx, cy, node: el('path', { d: smoothPath(pts, false), fill: 'none', stroke: S.ink, 'stroke-width': 4, 'stroke-linecap': 'round', opacity: 0.85 }, g) };
 }
 
 function dots(g, S) {
   const cx = rnd(W * 0.2, W * 0.8), cy = rnd(H * 0.2, H * 0.9);
   let d = '';
   for (let i = rint(8, 16); i > 0; i--) d += circleD(cx + rnd(-1400, 1400), cy + rnd(-900, 900), rnd(12, 26));
-  el('path', { d, fill: '#0a2bff', stroke: S.ink, 'stroke-width': 4 }, g);
+  return { cx, cy, node: el('path', { d, fill: '#0a2bff', stroke: S.ink, 'stroke-width': 4 }, g) };
 }
 
 // paprsky s jiskrami
@@ -769,7 +799,8 @@ function generate(newSeed) {
   const toPlace = pool.slice(0, elCount);
   placedBoxes.length = 0;
   // místo pod logem je obsazené: prvky koláže se mu vyhnou, text pod nálepkami prostě zmizí
-  const logoBox = LOGO && P.logo !== 'ne' ? LOGO.box : null;
+  const stickers = P.nalepky !== 'ne';
+  const logoBox = LOGO && P.logo !== 'ne' ? (stickers ? LOGO.box : LOGO.boxPlain) : null;
   if (logoBox) placedBoxes.push(logoBox);
   const hasText = TOPICS.length > 0;
   density = hasText ? Math.min(1, Math.max(0.5, (n - emptyRows.size) / Math.max(1, elCount))) : 1;
@@ -856,9 +887,26 @@ function generate(newSeed) {
   // Bez titulků se prvky skládají do volné kompozice (composeFree).
   const gapsBySize = shuffle(allGaps).sort((a, b) => (b.x2 - b.x1) - (a.x2 - a.x1));
   USED.kompozice = null;
+  // Bez textu se koule, odznak, čmáranice a tečky nedrží náhodných míst, ale přimknou se ke kompozici prvků.
+  let anchors = null, extra = 0;
+  const snap = (info, to) => { if (info && info.node.isConnected) info.node.setAttribute('transform', `translate(${f1(to.cx - info.cx)} ${f1(to.cy - info.cy)})`); };
+  const near = (spot, k) => ({ cx: spot.cx + rnd(-k, k) * spot.s.w, cy: spot.cy + rnd(-k, k) * spot.s.h });
   if (!hasText) {
-    USED.kompozice = weighted([['rozptyl', 3], ['hromada', 2], ['kruh', 2], ['proud', 2], ['mrizka', 1], ['hrdina', 2]]);
-    composeFree(gEl, toPlace.splice(0), P.kompozice || USED.kompozice, logoBox);
+    USED.kompozice = weighted([['rozptyl', 3], ['hromada', 2], ['kruh', 2], ['proud', 2], ['mrizka', 1], ['hrdina', 2], ['pas', 3]]);
+    const spots = composeFree(gEl, toPlace.splice(0), P.kompozice || USED.kompozice, logoBox);
+    extra = spots.extra || 0;
+    if (spots.length) {
+      anchors = { bySize: [...spots].sort((a, b) => b.s.w * b.s.h - a.s.w * a.s.h), cx: spots.reduce((t, q) => t + q.cx, 0) / spots.length, cy: spots.reduce((t, q) => t + q.cy, 0) / spots.length };
+      // koule za jeden z největších prvků, celá na deskách a ne pod logo
+      const ball = svg.querySelector('#koule');
+      if (ball) {
+        const c = ball.firstChild, r = +c.getAttribute('r'), to = near(pick(anchors.bySize.slice(0, 3)), 0.35);
+        to.cx = Math.min(W - BLEED - r * 0.8, Math.max(BLEED + r * 0.8, to.cx));
+        to.cy = Math.min(H - BLEED - r * 0.8, Math.max(BLEED + r * 0.8, to.cy));
+        if (logoBox && to.cx + r > logoBox.x1) to.cy = Math.max(to.cy, logoBox.y2 + r * 0.6);
+        snap({ node: ball, cx: +c.getAttribute('cx'), cy: +c.getAttribute('cy') }, to);
+      }
+    }
   }
   toPlace.forEach(e => {
     for (let shrink = 1; shrink > 0.35; shrink *= 0.8) {
@@ -881,21 +929,26 @@ function generate(newSeed) {
     }
   });
   USED.prvky = elAuto;
-  const placed = placedBoxes.length - (logoBox ? 1 : 0);
+  const placed = placedBoxes.length - (logoBox ? 1 : 0) - extra;
   INFO.prvky = placed === elCount ? `${elCount}` : `${placed} z ${elCount}`;
   USED.velikost = Math.round(scaleAuto * 100);
   INFO.velikost = (P.velikost || USED.velikost) + ' %';
 
   const gOver = el('g', { id: 'prvky' }, svg);
-  optional(P.odznak, 0.8, () => badge(gOver, S));
+  let badgeAt = null, dotsAt = null;
+  const scribbles = [];
+  optional(P.odznak, 0.8, () => { badgeAt = badge(gOver, S); });
+  if (anchors) snap(badgeAt, near(pick(anchors.bySize.slice(0, 4)), 0.4));
   // čmáranice jsou na čtyřech variantách z pěti; losuje se stranou, ať se ostatní vrstvy nepohnou
   const rsScribble = R.state(), scribbleOn = chance(0.8);
   R.state(rsScribble);
-  optional(P.cmaranice || (scribbleOn ? null : 'ne'), null, () => { for (let i = rint(1, 2); i > 0; i--) scribble(gOver, S); });
-  optional(P.tecky, 0.8, () => dots(gOver, S));
+  optional(P.cmaranice || (scribbleOn ? null : 'ne'), null, () => { for (let i = rint(1, 2); i > 0; i--) scribbles.push(scribble(gOver, S)); });
+  if (anchors) scribbles.forEach(q => snap(q, near(pick(anchors.bySize.slice(0, 4)), 0.5)));
+  optional(P.tecky, 0.8, () => { dotsAt = dots(gOver, S); });
+  if (anchors) snap(dotsAt, { cx: anchors.cx + rnd(-0.08, 0.08) * W, cy: anchors.cy + rnd(-0.08, 0.08) * H });
   optional(P.paprsky, 0.7, () => rays(gOver));
   // logo leží na všem kromě zrna, ať s obálkou drží pohromadě
-  if (logoBox) drawLogo();
+  if (logoBox) drawLogo(stickers);
   optional(P.zrno, 0.75, grain); // zrno mají tři varianty ze čtyř
   syncPanel();
 }
