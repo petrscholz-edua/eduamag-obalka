@@ -174,14 +174,15 @@ const CONTROLS = [
   { k: 'zare', label: 'Modrá záře', min: 0, max: 100, step: 5 },
   { sec: 'Vrstvy' },
   // bez pozadí je obálka průhledná (v náhledu šachovnice), i v uloženém SVG a PNG
-  { k: 'pozadi', label: 'Pozadí', tri: true },
+  { k: 'pozadi', label: 'Pozadí', tri: true, fixed: true },
   { k: 'koule', label: 'Koule', tri: true },
   { k: 'odznak', label: 'Odznak', tri: true },
   { k: 'cmaranice', label: 'Čmáranice', tri: true },
   { k: 'tecky', label: 'Tečky', tri: true },
   { k: 'paprsky', label: 'Paprsky', tri: true },
   { k: 'zrno', label: 'Zrno a prach', tri: true },
-  { k: 'logo', label: 'Logo', tri: true },
+  // „fixed“ = vrstva se nelosuje, jde jen vypnout (logo je to jediné, co se mezi variantami nemění)
+  { k: 'logo', label: 'Logo', tri: true, fixed: true },
 ];
 const P = {};
 CONTROLS.forEach(c => { if (c.k) P[c.k] = null; });
@@ -887,12 +888,15 @@ function generate(newSeed) {
 
   const gOver = el('g', { id: 'prvky' }, svg);
   optional(P.odznak, 0.8, () => badge(gOver, S));
-  optional(P.cmaranice, null, () => { for (let i = rint(1, 2); i > 0; i--) scribble(gOver, S); });
+  // čmáranice jsou na čtyřech variantách z pěti; losuje se stranou, ať se ostatní vrstvy nepohnou
+  const rsScribble = R.state(), scribbleOn = chance(0.8);
+  R.state(rsScribble);
+  optional(P.cmaranice || (scribbleOn ? null : 'ne'), null, () => { for (let i = rint(1, 2); i > 0; i--) scribble(gOver, S); });
   optional(P.tecky, 0.8, () => dots(gOver, S));
   optional(P.paprsky, 0.7, () => rays(gOver));
   // logo leží na všem kromě zrna, ať s obálkou drží pohromadě
   if (logoBox) drawLogo();
-  optional(P.zrno, null, grain);
+  optional(P.zrno, 0.75, grain); // zrno mají tři varianty ze čtyř
   syncPanel();
 }
 
@@ -966,7 +970,7 @@ function buildPanel() {
       row.classList.add('vradku');
       row.appendChild(h('span', {}, c.label));
       const seg = row.appendChild(h('div', { class: 'seg' }));
-      ui.btns = [[null, 'náhodně'], ['ano', 'ano'], ['ne', 'ne']].map(([v, t]) => {
+      ui.btns = (c.fixed ? [[null, 'ano'], ['ne', 'ne']] : [[null, 'náhodně'], ['ano', 'ano'], ['ne', 'ne']]).map(([v, t]) => {
         const b = seg.appendChild(h('button', { type: 'button' }, t));
         b.addEventListener('click', () => setParam(c.k, v));
         return [v, b];
@@ -1044,7 +1048,7 @@ function readHash() {
     const v = q.get(c.k), num = Number(v);
     if (v === null || v === '') P[c.k] = null;
     else if (c.opts) P[c.k] = v in c.opts ? v : null;
-    else if (c.tri) P[c.k] = v === 'ano' || v === 'ne' ? v : null;
+    else if (c.tri) P[c.k] = v === 'ne' || (v === 'ano' && !c.fixed) ? v : null;
     else if (c.list) { const off = v.split('/').filter(name => ELEMENTS.some(e => e.name === name)); P[c.k] = off.length ? off : null; }
     else P[c.k] = Number.isFinite(num) ? Math.min(c.max, Math.max(c.min, num)) : null;
   }
