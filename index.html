@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EDUA Typo Gen</title>
+<link rel="icon" href="data:,">
+<script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #161616; overflow: hidden; }
+  body { --panel: 310px; }
+  body.bez-panelu { --panel: 0px; }
+  #stage { position: fixed; inset: 0 var(--panel) 0 0; display: flex; align-items: center; justify-content: center; }
+  #art {
+    width: min(calc(100vw - var(--panel) - 48px), calc((100vh - 48px) * 5198 / 3744));
+    aspect-ratio: 5198 / 3744;
+    display: block;
+    cursor: pointer;
+  }
+  #panel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: var(--panel); overflow-y: auto; padding: 14px 16px 28px;
+    background: #1e1e1e; border-left: 1px solid #2d2d2d; color: #d8d8d8;
+    font: 12px/1.4 -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  }
+  body.bez-panelu #panel { display: none; }
+  #panel h3, #panel summary { margin: 18px 0 8px; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #7d7d7d; }
+  #panel summary { cursor: pointer; }
+  #panel button, #panel select, #panel input[type=number], #panel textarea, #ukaz {
+    font: inherit; color: inherit; background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 5px; padding: 4px 8px;
+  }
+  #panel button, #ukaz { cursor: pointer; white-space: nowrap; }
+  #panel button:hover, #ukaz:hover { background: #343434; }
+  .hlava, .rada { display: flex; align-items: center; gap: 6px; }
+  .hlava { justify-content: space-between; margin-bottom: 12px; }
+  .hlava strong { color: #fff; }
+  .rada > input { flex: 1; min-width: 0; }
+  .rada.dole { margin-top: 18px; }
+  .rada.dole button { flex: 1 1 auto; }
+  .prvek { margin-bottom: 10px; }
+  .prvek.vradku { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  .prvek.vradku > span { white-space: nowrap; }
+  .prvek.vradku select { flex: 0 1 180px; min-width: 0; }
+  .prvek.rucne select { border-color: #4a78ff; }
+  .popis { display: flex; align-items: baseline; gap: 6px; margin-bottom: 3px; white-space: nowrap; }
+  .hodnota { margin-left: auto; color: #858585; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .prvek.rucne .hodnota { color: #fff; }
+  #panel .zpet { display: none; padding: 0 6px; font-size: 11px; }
+  #panel .prvek.rucne .zpet { display: inline-block; }
+  .prvek input[type=range] { display: block; width: 100%; accent-color: #4a78ff; }
+  .seg { display: flex; }
+  #panel .seg button { border-radius: 0; padding: 2px 8px; margin-left: -1px; }
+  #panel .seg button:first-child { border-radius: 5px 0 0 5px; }
+  #panel .seg button:last-child { border-radius: 0 5px 5px 0; }
+  #panel .seg button.aktivni { background: #003de5; border-color: #003de5; color: #fff; }
+  .seznam { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; margin-top: 4px; }
+  .seznam label { display: flex; align-items: center; gap: 6px; min-width: 0; cursor: pointer; }
+  .seznam img { width: 26px; height: 26px; flex: none; object-fit: contain; background: #5c5c5c; border-radius: 3px; }
+  .seznam span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .seznam input { flex: none; accent-color: #4a78ff; }
+  .seznam input:not(:checked) ~ * { opacity: .4; }
+  #titulky { display: block; width: 100%; margin-bottom: 6px; resize: vertical; white-space: pre; }
+  #ukaz { position: fixed; top: 12px; right: 12px; display: none; color: #d8d8d8; font: 12px/1.4 -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; }
+  body.bez-panelu #ukaz { display: block; }
+  /* úzké okno: obálka nahoře, panel pod ní */
+  @media (max-width: 760px) {
+    body { --art-h: min(calc((100vw - 16px) * 3744 / 5198 + 16px), 55vh); }
+    #stage { inset: 0 0 auto 0; height: var(--art-h); }
+    #art { width: min(calc(100vw - 16px), calc((var(--art-h) - 16px) * 5198 / 3744)); }
+    #panel { top: var(--art-h); width: 100vw; border-left: 0; border-top: 1px solid #2d2d2d; }
+    body.bez-panelu #stage { inset: 0; height: auto; }
+    body.bez-panelu #art { width: min(calc(100vw - 16px), calc((100vh - 16px) * 5198 / 3744)); }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <svg id="art" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5198 3744"></svg>
+</div>
+<aside id="panel">
+  <div class="hlava"><strong>Obálka EDUAmag</strong><button id="skryt" type="button" title="Skrýt panel (H)">Skrýt</button></div>
+  <div class="rada">
+    <label for="cislo">Varianta</label>
+    <input id="cislo" type="number" min="0" step="1">
+    <button id="nova" type="button" title="Nová varianta (mezerník nebo klik do obálky)">Nová</button>
+  </div>
+  <div id="ovladani"></div>
+  <details>
+    <summary>Titulky</summary>
+    <textarea id="titulky" rows="12" spellcheck="false" title="Jeden titulek na řádek"></textarea>
+    <button id="titulky-reset" type="button">Původní titulky</button>
+  </details>
+  <div class="rada dole">
+    <button id="reset" type="button" title="Všechna nastavení zpět na náhodně">Vše náhodně</button>
+    <button id="exp-svg" type="button" title="Uložit SVG (S)">SVG</button>
+    <button id="exp-png" type="button" title="Uložit PNG (P)">PNG</button>
+  </div>
+</aside>
+<button id="ukaz" type="button" title="Zobrazit panel (H)">Nastavení</button>
+<script>
+// Rozevřené desky dle „predchozi cislo.jpg“: 5198×3744 px @ 300 dpi = 440 × 317 mm (vč. spadávky 10 mm)
+const W = 5198, H = 3744, DPI = 300, BLEED = 118;
+const NS = 'http://www.w3.org/2000/svg';
+
+const DEFAULT_TOPICS = [
+  'Novinky ze světa celoživotního vzdělávání',
+  'Adaptivní leadership je o odolnosti, odvaze a schopnosti reagovat na změnu bez paniky',
+  'Top Vision slaví 25 let! Jak se za uplynulé čtvrtstoletí změnilo firemní vzdělávání?',
+  'Jak podpořit paměť a zlepšit soustředění v době digitálního zahlcení?',
+  'Asertivita při obtížných rozhovorech obvykle nefunguje, empatii chápeme špatně',
+  'Vytrácí se z vašeho života radost? Budujte pozitivní mindset',
+  '5 tipů, jak se konečně rozmluvit v cizím jazyce',
+  'Jaké změny přinesl rok 2026 v oblasti jazykového vzdělávání?',
+  'Cringe, chillovat a kolaborace. Mluví gen Z ještě vůbec česky?',
+  'Novinka! Seznamte se s Lucy',
+  'Nejefektivnější mnemotechnické pomůcky: Vyzrajte na pravopis, gramatiku a čísla',
+];
+// titulky jdou přepsat v panelu (jeden na řádek); úprava se pamatuje v prohlížeči
+let TOPICS = DEFAULT_TOPICS;
+function setTopics(text) {
+  const lines = text.split('\n').map(s => s.trim()).filter(Boolean);
+  TOPICS = lines.length ? lines : DEFAULT_TOPICS;
+  try {
+    if (TOPICS === DEFAULT_TOPICS || TOPICS.join('\n') === DEFAULT_TOPICS.join('\n')) localStorage.removeItem('eduamag-titulky');
+    else localStorage.setItem('eduamag-titulky', TOPICS.join('\n'));
+  } catch (e) { /* bez úložiště se úprava jen nezapamatuje */ }
+}
+
+const FONT_URLS = {
+  // korporátní Moniak Sans EDUA
+  light: 'fonts/Moniak-Light.otf', regular: 'fonts/Moniak-Regular.otf',
+  medium: 'fonts/Moniak-Medium.otf', bold: 'fonts/Moniak-Bold.otf', black: 'fonts/Moniak-Black.otf',
+  // Inter (volná licence OFL) – grotesk, který losuje číslo varianty
+  int45: 'fonts/Inter-Light.ttf', int55: 'fonts/Inter-Regular.ttf', int65: 'fonts/Inter-Medium.ttf',
+  int75: 'fonts/Inter-Bold.ttf', int85: 'fonts/Inter-ExtraBold.ttf',
+  // Helvetica LT je komerční písmo: zůstává jen pro ruční výběr na vlastním počítači,
+  // sestavit-web.py ji do veřejné verze nedává (písmo, které se nenačte, z nabídky zmizí)
+  anton: 'fonts/Anton-Regular.ttf',
+  serif: 'fonts/PlayfairDisplay-Italic.otf',
+};
+const FONTS = {};
+
+// ─── Nastavení z panelu ───────────────────────────────────────────────────────
+// null = „náhodně“: hodnotu určí číslo varianty jako dřív. Co je nastavené ručně,
+// drží i při přepínání variant a zapisuje se do adresy za číslo (#406329&radky=7).
+const CONTROLS = [
+  { sec: 'Text' },
+  { k: 'radky', label: 'Počet řádků', min: 4, max: 20, step: 1 },
+  { k: 'vypln', label: 'Velikost písma v řádku', min: 50, max: 90, step: 1 },
+  { k: 'pismo', label: 'Písmo', opts: {
+    light: 'Moniak Light', regular: 'Moniak Regular', medium: 'Moniak Medium', bold: 'Moniak Bold', black: 'Moniak Black',
+    int45: 'Inter Light', int55: 'Inter Regular', int65: 'Inter Medium', int75: 'Inter Bold', int85: 'Inter Extra Bold',
+    hel45: 'Helvetica 45 Light', hel55: 'Helvetica 55 Roman', hel65: 'Helvetica 65 Medium', hel75: 'Helvetica 75 Bold', hel85: 'Helvetica 85 Heavy',
+    anton: 'Anton',
+  } },
+  { k: 'kurziva', label: 'Řádky kurzívou', min: 0, max: 100, step: 10 },
+  { k: 'pismena', label: 'Písmena', opts: { caps: 'VERZÁLKY', mixed: 'Jako ve větě', lower: 'minusky' } },
+  { sec: 'Kompozice' },
+  { k: 'vzduch', label: 'Prázdné místo', opts: { zadny: 'žádné', sloup: 'sloup', schody: 'schody', klin: 'klín' } },
+  { k: 'strana', label: 'Strana prázdna', opts: { vlevo: 'vlevo', vpravo: 'vpravo' } },
+  { k: 'prvky', label: 'Počet prvků koláže', min: 0, max: 0, step: 1 },
+  // odškrtnuté prvky (názvy souborů); nový soubor ve složce je vždy zaškrtnutý
+  { k: 'bez', label: 'Které prvky', list: true },
+  { k: 'velikost', label: 'Velikost prvků', min: 40, max: 250, step: 5 },
+  { k: 'schema', label: 'Pozadí', opts: { cerna: 'černá', uhlova: 'uhlová', hlubina: 'hlubina' } },
+  { sec: 'Vrstvy' },
+  { k: 'koule', label: 'Koule', tri: true },
+  { k: 'odznak', label: 'Odznak', tri: true },
+  { k: 'cmaranice', label: 'Čmáranice', tri: true },
+  { k: 'tecky', label: 'Tečky', tri: true },
+  { k: 'paprsky', label: 'Paprsky', tri: true },
+  { k: 'zrno', label: 'Zrno a prach', tri: true },
+  { k: 'logo', label: 'Logo', tri: true },
+];
+const P = {};
+CONTROLS.forEach(c => { if (c.k) P[c.k] = null; });
+// co varianta skutečně použila (pro zobrazení v panelu)
+const USED = {}, INFO = {};
+
+// háčky a čárky, které po vypadlém písmenu zůstanou „viset“
+const ACCENT_OF = {
+  'Č': 'ˇ', 'Š': 'ˇ', 'Ř': 'ˇ', 'Ž': 'ˇ', 'Ě': 'ˇ', 'Ň': 'ˇ', 'Ď': 'ˇ', 'Ť': 'ˇ',
+  'Á': '´', 'É': '´', 'Í': '´', 'Ó': '´', 'Ú': '´', 'Ý': '´', 'Ů': '˚',
+  'č': 'ˇ', 'š': 'ˇ', 'ř': 'ˇ', 'ž': 'ˇ', 'ě': 'ˇ', 'ň': 'ˇ',
+  'á': '´', 'é': '´', 'í': '´', 'ó': '´', 'ú': '´', 'ý': '´', 'ů': '˚',
+};
+// ď a ť mají háček vpravo od písmene, ne nad ním
+const ACCENT_RIGHT = { 'ď': 'ˇ', 'ť': 'ˇ' };
+
+// ─── Prvky koláže ze složky prvky/ (co tam přibude, generátor sám najde) ─────
+const ELEMENTS = [];
+async function loadElements() {
+  let names = [];
+  try {
+    // na webu je vedle prvků seznam (vytváří ho sestavit-web.py); lokálně stačí výpis složky ze serveru
+    const list = await fetch('prvky/seznam.json');
+    if (list.ok) names = await list.json();
+    else {
+      const html = await (await fetch('prvky/')).text();
+      names = [...html.matchAll(/href="([^"]+\.(?:png|jpg|jpeg|webp|gif))"/gi)].map(m => decodeURIComponent(m[1]));
+    }
+  } catch (e) { return; }
+  await Promise.all([...new Set(names)].map(async name => {
+    try {
+      const blob = await (await fetch('prvky/' + encodeURIComponent(name))).blob();
+      const href = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+      const img = new Image();
+      img.src = href;
+      await img.decode();
+      ELEMENTS.push({ name, href, img, ratio: img.naturalWidth / img.naturalHeight });
+    } catch (e) { /* vadný soubor přeskočíme */ }
+  }));
+  const take = file => { const i = ELEMENTS.findIndex(e => e.name.toLowerCase() === file); return i < 0 ? null : ELEMENTS.splice(i, 1)[0]; };
+  const logo = take(LOGO_FILE);
+  if (logo) LOGO = buildLogo(logo, take(LOGO_BACK_FILE));
+  // pořadí nesmí záviset na tom, který soubor se načte dřív – jinak by stejné číslo dávalo různé varianty
+  ELEMENTS.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// ─── Pevné logo ───────────────────────────────────────────────────────────────
+// Jediné, co se mezi variantami nemění. LOGO.png je hlavička titulní strany (šířka 210 mm = 2480 px
+// při 300 dpi): leží nahoře na pravé polovině desek, od hřbetu k okraji čistého formátu, a je podložená
+// shlukem nálepek, který pokračuje do spadávky. Oba soubory jsou ve složce prvky/, ale do náhodné koláže
+// se nepočítají. Poloha je odměřená z návrhu v plném formátu (se spadávkou).
+const LOGO_FILE = 'logo.png', LOGO_BACK_FILE = 'nalepky.png';
+const LOGO_BACK_DX = -397, LOGO_BACK_DY = -260; // posun nálepek vůči logu
+let LOGO = null;
+function buildLogo(logo, back) {
+  const lw = logo.img.naturalWidth, lh = logo.img.naturalHeight, x = W / 2, y = BLEED;
+  // plocha, které se prvky koláže vyhnou
+  const L = { href: logo.href, x, y, w: lw, h: lh, back: null, box: { x1: x, x2: W, y1: 0, y2: y + lh } };
+  if (back) {
+    const bw = back.img.naturalWidth, bh = back.img.naturalHeight;
+    L.back = { href: back.href, x: x + LOGO_BACK_DX, y: y + LOGO_BACK_DY, w: bw, h: bh };
+    L.box = { x1: Math.min(x, L.back.x), x2: W, y1: 0, y2: Math.max(y + lh, L.back.y + bh) };
+  }
+  return L;
+}
+function drawLogo() {
+  const g = el('g', { id: 'logo' }, svg);
+  const b = LOGO.back;
+  if (b) el('image', { href: b.href, x: b.x, y: b.y, width: b.w, height: b.h }, g);
+  el('image', { href: LOGO.href, x: LOGO.x, y: LOGO.y, width: LOGO.w, height: LOGO.h }, g);
+}
+
+// prvek se vloží do řádku mezi dvě slova a věta pokračuje za ním
+// velký prvek přesahuje přes sousední řádky, malý se drží výšky písma (small = jen malý)
+// Když je prvků víc než řádků, malé prvky se zmenší (density), ať se vejdou do vět a nelezou přes text.
+let density = 1;
+// celková velikost prvků: ručně z posuvníku, jinak ji losuje číslo varianty
+let elScale = 1;
+function elementSize(e, cap, rowH, small, shrink = 1) {
+  const big = chance(0.45) && !small;
+  const h = (big ? Math.min(rowH * rnd(1.5, 2.2), H * 0.28) : cap * rnd(1.1, 1.6) * density) * shrink * elScale;
+  return { h, w: h * e.ratio };
+}
+// prvek musí padnout celý dovnitř desek, ne do oříznuté části řádku
+const TRIM_L = BLEED + 80, TRIM_R = W - BLEED - 80;
+const inTrim = (cx, size) => cx - size.w / 2 > TRIM_L && cx + size.w / 2 < TRIM_R;
+const placedBoxes = [];
+function boxFree(cx, cy, size) {
+  const a = { x1: cx - size.w / 2, x2: cx + size.w / 2, y1: cy - size.h / 2, y2: cy + size.h / 2 };
+  return !placedBoxes.some(b => a.x1 < b.x2 + 60 && b.x1 < a.x2 + 60 && a.y1 < b.y2 + 60 && b.y1 < a.y2 + 60);
+}
+function placeElement(g, e, cx, cy, size) {
+  placedBoxes.push({ x1: cx - size.w / 2, x2: cx + size.w / 2, y1: cy - size.h / 2, y2: cy + size.h / 2 });
+  el('image', {
+    href: e.href, x: f1(cx - size.w / 2), y: f1(cy - size.h / 2), width: f1(size.w), height: f1(size.h),
+    transform: `rotate(${f1(rnd(-4, 4))} ${f1(cx)} ${f1(cy)})`,
+  }, g);
+}
+
+// ─── RNG ──────────────────────────────────────────────────────────────────────
+let R;
+function mulberry32(a) {
+  const f = function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  // stav jde přečíst a vrátit zpět (viz optional)
+  f.state = v => (v === undefined ? a : (a = v));
+  return f;
+}
+const rnd = (a, b) => R() * (b - a) + a;
+const rint = (a, b) => Math.floor(rnd(a, b + 1));
+const pick = arr => arr[Math.floor(R() * arr.length)];
+const chance = p => R() < p;
+function weighted(list) { let v = R() * list.reduce((s, x) => s + x[1], 0); for (const [k, w] of list) if ((v -= w) <= 0) return k; return list[0][0]; }
+function shuffle(arr) { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+const upper = s => s.toLocaleUpperCase('cs');
+const f1 = v => Math.round(v * 10) / 10;
+
+// ─── SVG ──────────────────────────────────────────────────────────────────────
+const svg = document.getElementById('art');
+let defs, uid = 0;
+function el(tag, attrs, parent) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) if (attrs[k] !== undefined) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+const nid = p => p + (uid++);
+function radial(stops) {
+  const gid = nid('rg');
+  const g = el('radialGradient', { id: gid }, defs);
+  stops.forEach(([o, c, a]) => el('stop', { offset: o, 'stop-color': c, 'stop-opacity': a }, g));
+  return `url(#${gid})`;
+}
+function blur(sd) {
+  const fid = nid('bl');
+  el('feGaussianBlur', { stdDeviation: f1(sd) }, el('filter', { id: fid, x: '-50%', y: '-50%', width: '200%', height: '200%' }, defs));
+  return `url(#${fid})`;
+}
+function smoothPath(pts, closed) {
+  const P = closed ? [pts[pts.length - 1], ...pts, pts[0], pts[1]] : [pts[0], ...pts, pts[pts.length - 1]];
+  let d = `M${f1(P[1][0])} ${f1(P[1][1])}`;
+  for (let i = 1; i < P.length - 2; i++) {
+    const [p0, p1, p2, p3] = [P[i - 1], P[i], P[i + 1], P[i + 2]];
+    d += `C${f1(p1[0] + (p2[0] - p0[0]) / 6)} ${f1(p1[1] + (p2[1] - p0[1]) / 6)} ${f1(p2[0] - (p3[0] - p1[0]) / 6)} ${f1(p2[1] - (p3[1] - p1[1]) / 6)} ${f1(p2[0])} ${f1(p2[1])}`;
+  }
+  return closed ? d + 'Z' : d;
+}
+const circleD = (x, y, r) => `M${f1(x + r)} ${f1(y)}a${f1(r)} ${f1(r)} 0 1 0 ${f1(-2 * r)} 0a${f1(r)} ${f1(r)} 0 1 0 ${f1(2 * r)} 0`;
+
+// ─── Písmo → křivky ───────────────────────────────────────────────────────────
+function slant(fontKey) {
+  const a = FONTS[fontKey].tables.post ? FONTS[fontKey].tables.post.italicAngle : 0;
+  return Math.tan((-a * Math.PI) / 180);
+}
+function capHeight(fontKey) {
+  const f = FONTS[fontKey];
+  const ch = f.tables.os2 && f.tables.os2.sCapHeight ? f.tables.os2.sCapHeight : f.charToGlyph('H').getBoundingBox().y2;
+  return ch / f.unitsPerEm;
+}
+
+// Jeden řádek přes celou šířku: verzálky, těsně, oříznutý na okrajích; občas vypadlé písmeno
+// šířka textu ve stejné sazbě, jakou použije textRow
+function rowWidth(text, fontKey, fs, caseMode) {
+  const p = rowPrefix(text, fontKey, fs, caseMode);
+  return p[p.length - 1];
+}
+// p[i] = šířka prvních i znaků (p[0] = 0, poslední = šířka celého textu)
+function rowPrefix(text, fontKey, fs, caseMode) {
+  const font = FONTS[fontKey];
+  const str = caseMode === 'lower' ? text.toLocaleLowerCase('cs') : caseMode === 'mixed' ? text : upper(text);
+  const scale = fs / font.unitsPerEm;
+  const track = (fontKey === 'serif' ? -0.005 : -0.012) * fs * (caseMode === 'caps' ? 1 : 0.6);
+  const glyphs = [...str].map(c => {
+    const b = c.normalize('NFD')[0];
+    if ((ACCENT_OF[c] || ACCENT_RIGHT[c]) && b === 'i') { const g = font.charToGlyph('ı'); if (g && g.index) return g; }
+    return font.charToGlyph(ACCENT_OF[c] || ACCENT_RIGHT[c] ? b : c);
+  });
+  let x = 0;
+  const p = [0];
+  glyphs.forEach((gl, i) => {
+    if (i > 0) x += font.getKerningValue(glyphs[i - 1], gl) * scale + track;
+    x += gl.advanceWidth * scale;
+    p.push(x);
+  });
+  return p;
+}
+
+function textRow(g, text, fontKey, baseline, fs, color, caseMode, startX) {
+  const font = FONTS[fontKey];
+  const str = caseMode === 'lower' ? text.toLocaleLowerCase('cs') : caseMode === 'mixed' ? text : upper(text);
+  const chars = [...str];
+  // písmeno bez diakritiky; u „í“ bezpuntíkové ı, ať nevznikne puntík i čárka
+  const baseGlyph = (c) => {
+    const b = c.normalize('NFD')[0];
+    if (b === 'i') { const g = font.charToGlyph('ı'); if (g && g.index) return g; }
+    return font.charToGlyph(b);
+  };
+  // znaky, které písmo nemá (Helvetica nemá č, ě, ů…), skládáme z písmene a akcentu
+  // → šířku bereme z toho písmene, jinak by uprostřed slov vznikly mezery
+  const glyphs = [...str].map(c => (ACCENT_OF[c] || ACCENT_RIGHT[c] ? baseGlyph(c) : font.charToGlyph(c)));
+  const scale = fs / font.unitsPerEm;
+  const track = (fontKey === 'serif' ? -0.005 : -0.012) * fs * (caseMode === 'caps' ? 1 : 0.6);
+  const xs = [];
+  let x = 0;
+  glyphs.forEach((gl, i) => {
+    if (i > 0) x += font.getKerningValue(glyphs[i - 1], gl) * scale + track;
+    xs.push(x);
+    x += gl.advanceWidth * scale;
+  });
+  const tw = x;
+  const x0 = startX !== undefined ? startX : (tw < W * 0.94 ? rnd(0, 1) * (W - tw) : -rnd(0.04, 0.96) * (tw - W));
+
+  let d = '';
+  const capTop = baseline - capHeight(fontKey) * fs;
+  // mezery mezi jednotlivými sděleními (sem se dají vkládat prvky koláže)
+  const gaps = [];
+  { let run = null;
+    chars.forEach((c, i) => {
+      if (c === ' ') { if (!run) run = { x1: x0 + xs[i], x2: x0 + xs[i] }; run.x2 = x0 + xs[i] + glyphs[i].advanceWidth * scale; }
+      else if (run) { if (run.x2 - run.x1 > fs * 0.8) gaps.push({ ...run, baseline, cap: capHeight(fontKey) * fs }); run = null; }
+    });
+    if (run && run.x2 - run.x1 > fs * 0.8) gaps.push({ ...run, baseline, cap: capHeight(fontKey) * fs });
+  }
+  // diakritika zvlášť (opentype.js neumí skládané znaky z CFF) – nad střed znaku
+  const accentD = (acc, gx, base) => {
+    const bb = font.getPath(acc, 0, 0, fs).getBoundingBox();
+    const bbb = base.getPath(0, 0, fs).getBoundingBox();
+    const top = baseline + bbb.y1; // akcent sedí těsně nad samotným písmenem (verzálkou i minuskou)
+    const ax = gx + (bbb.x1 + bbb.x2) / 2 - (bb.x1 + bb.x2) / 2 + slant(fontKey) * (baseline - top) * 0.54;
+    const ay = top - fs * 0.045 - bb.y2;
+    return font.getPath(acc, ax, ay, fs).toPathData(1);
+  };
+  chars.forEach((c, i) => {
+    const gx = x0 + xs[i];
+    if (gx > W + fs || gx < -fs * 2 || c === ' ' || !glyphs[i]) return;
+    if (ACCENT_RIGHT[c]) {
+      const base = baseGlyph(c);
+      d += base.getPath(gx, baseline, fs).toPathData(1);
+      const bb = font.getPath(ACCENT_RIGHT[c], 0, 0, fs * 0.8).getBoundingBox();
+      d += font.getPath(ACCENT_RIGHT[c], gx + base.advanceWidth * scale - bb.x1 * 0.2, baseline - capHeight(fontKey) * fs * 0.98 - bb.y2, fs * 0.8).toPathData(1);
+      return;
+    }
+    if (ACCENT_OF[c]) {
+      const base = baseGlyph(c);
+      d += base.getPath(gx, baseline, fs).toPathData(1);
+      d += accentD(ACCENT_OF[c], gx, base);
+      return;
+    }
+    d += glyphs[i].getPath(gx, baseline, fs).toPathData(1);
+  });
+  el('path', { d, fill: color }, g);
+  return gaps;
+}
+
+// ─── Barevná schémata (EDUA modrá #003de5 jako základ) ────────────────────────
+const SCHEMES = [
+  // vždy tmavé pozadí: černá, uhlová s modrým nádechem, tmavě modrá „hlubina“
+  { name: 'cerna', weight: 3, base: ['#040404', '#0a0a0a', '#050505'], light: ['#003de5', '#1f55ff', '#003de5'], dark: '#000000', text: '#ffffff', ink: '#3d6dff', badge: '#003de5', badgeLine: '#ffffff' },
+  { name: 'uhlova', weight: 3, base: ['#05060c', '#0b0f1e', '#07080f'], light: ['#003de5', '#4a78ff', '#1f55ff'], dark: '#000000', text: '#ffffff', ink: '#4a78ff', badge: '#003de5', badgeLine: '#ffffff' },
+  { name: 'hlubina', weight: 2, base: ['#000617', '#000f3d', '#00072a'], light: ['#3d6dff', '#003de5', '#a9c8ff'], dark: '#000000', text: '#ffffff', ink: '#6f9dff', badge: '#003de5', badgeLine: '#ffffff' },
+];
+
+// ─── Pozadí a prvky ───────────────────────────────────────────────────────────
+function background(S) {
+  const lg = nid('lg'), a = rnd(0, Math.PI * 2);
+  const g = el('linearGradient', { id: lg, x1: f1(0.5 - Math.cos(a) / 2), y1: f1(0.5 - Math.sin(a) / 2), x2: f1(0.5 + Math.cos(a) / 2), y2: f1(0.5 + Math.sin(a) / 2) }, defs);
+  S.base.forEach((c, i) => el('stop', { offset: i / (S.base.length - 1), 'stop-color': c }, g));
+  el('rect', { x: 0, y: 0, width: W, height: H, fill: `url(#${lg})` }, svg);
+  const gl = el('g', { id: 'svetla' }, svg);
+  for (let i = rint(2, 3); i > 0; i--) {
+    const c = pick(S.light);
+    el('ellipse', { cx: f1(rnd(0, W)), cy: f1(rnd(H * 0.2, H * 1.05)), rx: f1(rnd(900, 2200)), ry: f1(rnd(600, 1400)), fill: radial([[0, c, rnd(0.35, 0.65)], [1, c, 0]]) }, gl);
+  }
+  el('ellipse', { cx: f1(rnd(0, W)), cy: f1(rnd(0, H)), rx: f1(rnd(1200, 2400)), ry: f1(rnd(900, 1600)), fill: radial([[0, S.dark, rnd(0.35, 0.6)], [1, S.dark, 0]]) }, gl);
+}
+
+// skleněná koule za textem
+function sphere() {
+  const g = el('g', { id: 'koule' }, svg);
+  const r = rnd(480, 900), cx = rnd(W * 0.1, W * 0.9), cy = rnd(H * 0.35, H * 0.85);
+  el('circle', { cx: f1(cx), cy: f1(cy), r: f1(r), fill: radial([[0, '#003de5', 1], [0.78, '#0a3cff', 0.95], [1, '#7aa3ff', 0.55]]) }, g);
+  el('circle', { cx: f1(cx), cy: f1(cy), r: f1(r * 0.97), fill: 'none', stroke: '#ffffff', 'stroke-width': f1(r * 0.06), 'stroke-opacity': 0.35, filter: blur(r * 0.05) }, g);
+  el('ellipse', { cx: f1(cx - r * 0.35), cy: f1(cy - r * 0.45), rx: f1(r * 0.35), ry: f1(r * 0.18), fill: '#ffffff', opacity: 0.18, filter: blur(r * 0.08) }, g);
+}
+
+// hvězdicový odznak přes text
+function badge(g, S) {
+  const r = rnd(230, 420), cx = rnd(W * 0.15, W * 0.85), cy = rnd(H * 0.15, H * 0.85);
+  const n = rint(16, 26), pts = [];
+  for (let i = 0; i < n * 2; i++) {
+    const a = (i / (n * 2)) * Math.PI * 2, rr = i % 2 ? r * rnd(0.7, 0.8) : r * rnd(0.98, 1.1);
+    pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]);
+  }
+  el('path', { d: smoothPath(pts, true), fill: S.badge, stroke: S.badgeLine, 'stroke-width': 3, 'stroke-opacity': 0.8 }, g);
+}
+
+function scribble(g, S) {
+  const cx = rnd(W * 0.2, W * 0.8), cy = rnd(H * 0.3, H * 0.9), rx = rnd(250, 700), ry = rx * rnd(0.6, 1.6);
+  const turns = rnd(1.5, 3), n = Math.round(turns * 9), pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * turns * Math.PI * 2, k = rnd(0.5, 1.1);
+    pts.push([cx + Math.cos(a) * rx * k + i * rnd(-15, 25), cy + Math.sin(a) * ry * k]);
+  }
+  el('path', { d: smoothPath(pts, false), fill: 'none', stroke: S.ink, 'stroke-width': 4, 'stroke-linecap': 'round', opacity: 0.85 }, g);
+}
+
+function dots(g, S) {
+  const cx = rnd(W * 0.2, W * 0.8), cy = rnd(H * 0.2, H * 0.9);
+  let d = '';
+  for (let i = rint(8, 16); i > 0; i--) d += circleD(cx + rnd(-1400, 1400), cy + rnd(-900, 900), rnd(12, 26));
+  el('path', { d, fill: '#0a2bff', stroke: S.ink, 'stroke-width': 4 }, g);
+}
+
+// paprsky s jiskrami
+function rays(g) {
+  const cx = rnd(W * 0.3, W * 0.8), cy = rnd(H * 0.1, H * 0.5);
+  let d = '';
+  for (let i = rint(10, 18); i > 0; i--) {
+    const a = rnd(0, Math.PI * 2), l1 = rnd(20, 120), l2 = rnd(300, 1000);
+    d += `M${f1(cx + Math.cos(a) * l1)} ${f1(cy + Math.sin(a) * l1)}L${f1(cx + Math.cos(a) * l2)} ${f1(cy + Math.sin(a) * l2)}`;
+  }
+  el('path', { d, stroke: '#cfe2ff', 'stroke-width': 2.5, opacity: 0.75, fill: 'none' }, g);
+  let s = '';
+  for (let i = 0; i < 220; i++) {
+    const a = rnd(0, Math.PI * 2), rr = Math.abs(rnd(-1, 1) * rnd(0, 1)) * 1300;
+    s += circleD(cx + Math.cos(a) * rr * 1.3, cy + Math.sin(a) * rr, rnd(1.5, 4.5));
+  }
+  el('path', { d: s, fill: '#dbe8ff', opacity: 0.7 }, g);
+  el('circle', { cx: f1(cx), cy: f1(cy), r: 10, fill: '#ffffff' }, g);
+}
+
+// zrno a tiskový „prach“ (samostatné vrstvy, v Illustratoru jdou smazat)
+function grain() {
+  const fid = nid('gr');
+  const f = el('filter', { id: fid, x: 0, y: 0, width: W, height: H, filterUnits: 'userSpaceOnUse' }, defs);
+  el('feTurbulence', { type: 'fractalNoise', baseFrequency: 0.95, numOctaves: 2, seed: rint(1, 999), stitchTiles: 'stitch' }, f);
+  el('feColorMatrix', { type: 'saturate', values: 0 }, f);
+  el('rect', { id: 'zrno', x: 0, y: 0, width: W, height: H, filter: `url(#${fid})`, opacity: 0.05 }, svg);
+  const fid2 = nid('sp');
+  const f2 = el('filter', { id: fid2, x: 0, y: 0, width: W, height: H, filterUnits: 'userSpaceOnUse' }, defs);
+  el('feTurbulence', { type: 'fractalNoise', baseFrequency: 0.6, numOctaves: 1, seed: rint(1, 999) }, f2);
+  // jen řídké světlé tečky (práh na šumu)
+  el('feColorMatrix', { type: 'matrix', values: '0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  24 0 0 0 -17.2' }, f2);
+  el('rect', { id: 'prach', x: 0, y: 0, width: W, height: H, filter: `url(#${fid2})`, opacity: 0.35 }, svg);
+}
+
+// ─── Generování ───────────────────────────────────────────────────────────────
+let seed, hashTimer;
+// číslo varianty + ruční nastavení = úplný recept na obálku
+const recipe = () => seed + CONTROLS.filter(c => c.k && P[c.k] !== null)
+  .map(c => `&${c.k}=${c.list ? P[c.k].map(encodeURIComponent).join('/') : P[c.k]}`).join('');
+// volitelná vrstva: „náhodně“ rozhodne číslo varianty (p = pravděpodobnost, null = vždy);
+// ruční ano/ne vrstvu vynutí nebo skryje tak, aby se zbytek kompozice nepohnul
+function optional(mode, p, draw) {
+  const roll = p === null || chance(p);
+  if (mode === 'ano' && !roll) { const s = R.state(); draw(); R.state(s); }
+  else if (mode === 'ne' && roll) {
+    // vykreslíme a zase smažeme, ať se spotřebuje stejně náhodných čísel
+    const marks = [svg, ...svg.children].map(node => [node, node.childElementCount]);
+    draw();
+    marks.forEach(([node, c]) => { while (node.childElementCount > c) node.lastElementChild.remove(); });
+  }
+  else if (roll) draw();
+}
+function generate(newSeed) {
+  seed = newSeed;
+  R = mulberry32(seed);
+  // adresu přepíšeme až po chvilce klidu: při tažení posuvníku by prohlížeč časté zápisy začal zahazovat
+  clearTimeout(hashTimer);
+  hashTimer = setTimeout(() => history.replaceState(null, '', '#' + recipe()), 150);
+  svg.innerHTML = '';
+  uid = 0;
+  defs = el('defs', {}, svg);
+  const schemeAuto = weighted(SCHEMES.map(s => [s, s.weight]));
+  const S = SCHEMES.find(s => s.name === P.schema) || schemeAuto;
+  USED.schema = schemeAuto.name;
+
+  background(S);
+  optional(P.koule, 0.85, sphere);
+
+  // řádky textu přes celou plochu, každý řádek jedno téma
+  const nAuto = rint(8, 11);
+  const n = P.radky || nAuto;
+  const rowH = H / n;
+  USED.radky = nAuto;
+  // velikost písma v řádku: základ pro celou variantu (nad 80 % už háčky zasahují do řádku nad),
+  // jednotlivé řádky se od něj jen lehce liší
+  const fillBase = rnd(0.62, 0.78);
+  USED.vypln = Math.round(fillBase * 100);
+  INFO.vypln = (P.vypln || USED.vypln) + ' %';
+  INFO.radky = `${n} · verzálky ${Math.round(rowH * (P.vypln || USED.vypln) / 100 / DPI * 25.4)} mm`;
+  const topics = shuffle(TOPICS.map((t, i) => i));
+  const serifRows = new Set();
+  const serifAuto = rint(2, Math.ceil(n * 0.45));
+  const serifCount = P.kurziva === null ? serifAuto : Math.round(P.kurziva / 100 * n);
+  USED.kurziva = Math.round(serifAuto / n * 10) * 10;
+  INFO.kurziva = `${serifCount} z ${n}`;
+  // kurzíva ve skupinkách po 1–3 řádcích
+  while (serifRows.size < serifCount) {
+    const start = rint(0, n - 1), len = rint(1, 3);
+    for (let k = 0; k < len && serifRows.size < serifCount; k++) serifRows.add((start + k) % n);
+  }
+  // bezserifové písmo pro celou variantu: Moniak Sans, nebo Helvetica
+  const sansAuto = weighted([['regular', 3], ['light', 2], ['int55', 3], ['int45', 2], ['int65', 1]]);
+  const sansKey = P.pismo || sansAuto;
+  USED.pismo = sansAuto;
+  // ne všechno verzálkami: část řádků normálně psaná, část celá minuskami
+  const caseModes = Array.from({ length: n }, () => weighted([['caps', 5], ['mixed', 3], ['lower', 2]])).map(m => P.pismena || m);
+  // vzduch má tvar: svislý sloup, schody nebo klín – řádky v té oblasti končí (nebo začínají)
+  // na hranici sdělení, takže prázdné místo tvoří kompozici, ne vodorovný pruh
+  const free = shuffle([...Array(n).keys()]);
+  const emptyRows = new Set(free.slice(0, rint(0, 1)));
+  const voidAuto = weighted([['sloup', 3], ['schody', 3], ['klin', 2]]);
+  const voidKind = P.vzduch || voidAuto;
+  const noVoid = voidKind === 'zadny'; // plná plocha: žádný tvar, žádný vynechaný ani zkrácený řádek
+  if (noVoid) emptyRows.clear();
+  const vFrom = rint(0, Math.max(0, n - 4)), vTo = Math.min(n - 1, vFrom + rint(2, 5));
+  const sideAuto = chance(0.5) ? 'vpravo' : 'vlevo';
+  const vSide = P.strana || sideAuto; // kde je prázdno
+  USED.vzduch = voidAuto;
+  USED.strana = sideAuto;
+  // prázdný pruh je jen pás u okraje (15–35 % šířky), ne půlka desek
+  const vX = vSide === 'vpravo' ? W * rnd(0.65, 0.85) : W * rnd(0.15, 0.35);
+  // pro řádek vrátí [odkud, kam] se smí sázet
+  const rowWindow = (i) => {
+    if (noVoid || i < vFrom || i > vTo) return [null, null];
+    const t = (i - vFrom) / Math.max(1, vTo - vFrom);
+    let edgeX = vX;
+    if (voidKind === 'schody') edgeX = vX + (vSide === 'vpravo' ? -1 : 1) * W * 0.12 * t;
+    if (voidKind === 'klin') edgeX = vX + (vSide === 'vpravo' ? -1 : 1) * W * 0.14 * Math.sin(Math.PI * t);
+    return vSide === 'vpravo' ? [null, edgeX] : [edgeX, null];
+  };
+  let queue = [];
+  const nextTopic = () => (queue.length ? queue : (queue = shuffle(TOPICS))).pop();
+  const gText = el('g', { id: 'text' }, svg);
+  const gEl = el('g', { id: 'prvky-kolaz' }, svg);
+  // na obálce jsou vždy všechny zaškrtnuté prvky ze složky; posuvníkem jde počet ubrat
+  const pool = shuffle(ELEMENTS).filter(e => !(P.bez || []).includes(e.name));
+  const elAuto = pool.length;
+  const scaleAuto = rnd(0.7, 1.3);
+  elScale = P.velikost ? P.velikost / 100 : scaleAuto;
+  const elCount = P.prvky === null ? elAuto : Math.min(elAuto, P.prvky);
+  const toPlace = pool.slice(0, elCount);
+  placedBoxes.length = 0;
+  // místo pod logem je obsazené: prvky koláže se mu vyhnou, text pod nálepkami prostě zmizí
+  const logoBox = LOGO && P.logo !== 'ne' ? LOGO.box : null;
+  if (logoBox) placedBoxes.push(logoBox);
+  density = Math.min(1, Math.max(0.5, (n - emptyRows.size) / Math.max(1, elCount)));
+  const allGaps = [];
+  let rowsLeft = n - emptyRows.size;
+  for (let i = 0; i < n; i++) {
+    if (emptyRows.has(i)) continue;
+    const fontKey = serifRows.has(i) ? 'serif' : sansKey;
+    const cap = capHeight(fontKey);
+    const fillAuto = fillBase + rnd(-0.03, 0.03);
+    const fs = (rowH * (P.vypln ? P.vypln / 100 : fillAuto)) / cap;
+    const baseline = i * rowH + rowH / 2 + cap * fs / 2;
+    const caseMode = caseModes[i];
+    // minusky mají menší střední výšku, tak řádek trochu zvětšíme
+    const fsRow = caseMode === 'caps' ? fs : fs * 1.18;
+    // řádek = proud celých titulků za sebou, oddělených mezerou;
+    // ořezává se jen to, co přeteče přes okraj desek – uvnitř se nic neusekává
+    const [winFrom, winTo] = rowWindow(i);
+    const first = nextTopic();
+    const startX = winFrom !== null
+      ? winFrom + rnd(0, W * 0.05)
+      : (chance(0.75) ? -rnd(0.05, 0.75) * rowWidth(first, fontKey, fsRow, caseMode) : rnd(0.02, 0.22) * W);
+    // řádek končí tam, kde skončí celé sdělení – buď za okrajem desek, nebo na hraně prázdného tvaru
+    const fillTo = winTo !== null ? winTo : (chance(0.15) && !noVoid ? W * rnd(0.68, 0.9) : W * rnd(1.02, 1.3));
+    let text = first;
+    let guard = 0;
+    while (guard++ < 12) {
+      const next = ' '.repeat(rint(4, 9)) + nextTopic();
+      if (startX + rowWidth(text + next, fontKey, fsRow, caseMode) > fillTo) break;
+      text += next;
+    }
+    // do řádku se vkládají prvky: mezera mezi slovy se roztáhne přesně na šířku prvku.
+    // Prvky se dělí rovnoměrně mezi zbývající řádky, ať se na obálku dostanou všechny.
+    const capPx0 = capHeight(fontKey) * fsRow;
+    const perRow = toPlace.length / rowsLeft--;
+    let want = perRow > 1 ? Math.ceil(perRow) : (toPlace.length && chance(Math.max(0.7, perRow)) ? 1 : 0);
+    if (want) {
+      const spaceAdv = rowWidth(' x', fontKey, fsRow, caseMode) - rowWidth('x', fontKey, fsRow, caseMode);
+      const cy = baseline - capPx0 / 2;
+      // mezery mezi slovy uvnitř sdělení (ne ty mezi sděleními), jen ve viditelné části řádku
+      const pw = rowPrefix(text, fontKey, fsRow, caseMode);
+      const spots = [];
+      for (let ci = 1; ci < text.length - 1; ci++) {
+        if (text[ci] !== ' ' || text[ci - 1] === ' ' || text[ci + 1] === ' ') continue;
+        const x = startX + pw[ci];
+        if (logoBox && x > logoBox.x1 - capPx0 && cy - capPx0 / 2 < logoBox.y2) continue;
+        if (x > TRIM_L && x < TRIM_R) spots.push(ci);
+      }
+      // jdeme zleva doprava (vložení posune jen to, co je dál vpravo) a mezery losujeme
+      let added = 0;
+      spots.forEach((ci0, j) => {
+        if (!want || !chance(want / (spots.length - j))) return;
+        const e = toPlace[toPlace.length - 1], ci = ci0 + added;
+        const left = startX + rowWidth(text.slice(0, ci), fontKey, fsRow, caseMode);
+        // nejdřív vylosovaná velikost; když se nevejde nebo překáží jinému prvku, tak malá a ještě menší
+        for (const [small, shrink] of [[false, 1], [true, 1], [true, 0.7]]) {
+          const size = elementSize(e, capPx0, rowH, small, shrink);
+          const k = Math.max(2, Math.round((size.w + capPx0 * 0.7) / Math.max(1, spaceAdv)));
+          const cx = left + (k * spaceAdv) / 2;
+          if (!inTrim(cx, size) || !boxFree(cx, cy, size)) continue;
+          text = text.slice(0, ci) + ' '.repeat(k) + text.slice(ci + 1);
+          added += k - 1;
+          placeElement(gEl, toPlace.pop(), cx, cy, size);
+          want--;
+          break;
+        }
+      });
+    }
+    const rowGaps = textRow(gText, text, fontKey, baseline, fsRow, S.text, caseMode, startX);
+    rowGaps.forEach(gp => { if (gp.x1 > -200 && gp.x2 < W + 200) allGaps.push(gp); });
+    // volné místo na řádku před prvním a za posledním sdělením se počítá taky
+    const capPx = capHeight(fontKey) * fsRow;
+    const rowEnd = startX + rowWidth(text, fontKey, fsRow, caseMode);
+    if (rowEnd < W - capPx * 1.2) allGaps.push({ x1: rowEnd, x2: Math.min(W, fillTo), baseline, cap: capPx });
+    if (startX > capPx * 1.2) allGaps.push({ x1: 0, x2: startX, baseline, cap: capPx });
+  }
+
+  // co se nevešlo do věty, doplníme do volného místa na řádku: nejdřív v plné velikosti,
+  // pak postupně menší; až když není kam, položí se prvek přes text
+  const gapsBySize = shuffle(allGaps).sort((a, b) => (b.x2 - b.x1) - (a.x2 - a.x1));
+  toPlace.forEach(e => {
+    for (let shrink = 1; shrink > 0.35; shrink *= 0.8) {
+      for (const gp of gapsBySize) {
+        const x1 = Math.max(gp.x1, TRIM_L), x2 = Math.min(gp.x2, TRIM_R);
+        const size = elementSize(e, gp.cap, rowH, shrink < 1, shrink);
+        const cy = gp.baseline - gp.cap / 2, slack = x2 - x1 - size.w;
+        if (slack < 0) continue;
+        // v širokém volném místě zkusíme střed i oba kraje
+        for (const t of [0.5, 0, 1]) {
+          const cx = x1 + size.w / 2 + slack * t;
+          if (boxFree(cx, cy, size)) return placeElement(gEl, e, cx, cy, size);
+        }
+      }
+    }
+    for (let t = 0; t < 300; t++) {
+      const size = elementSize(e, rowH * 0.75, rowH, true, 1 - 0.7 * t / 300);
+      const cx = rnd(TRIM_L + size.w / 2, TRIM_R - size.w / 2), cy = (rint(0, n - 1) + 0.5) * rowH;
+      if (boxFree(cx, cy, size) || t === 299) return placeElement(gEl, e, cx, cy, size);
+    }
+  });
+  USED.prvky = elAuto;
+  const placed = placedBoxes.length - (logoBox ? 1 : 0);
+  INFO.prvky = placed === elCount ? `${elCount}` : `${placed} z ${elCount}`;
+  USED.velikost = Math.round(scaleAuto * 100);
+  INFO.velikost = (P.velikost || USED.velikost) + ' %';
+
+  const gOver = el('g', { id: 'prvky' }, svg);
+  optional(P.odznak, 0.8, () => badge(gOver, S));
+  optional(P.cmaranice, null, () => { for (let i = rint(1, 2); i > 0; i--) scribble(gOver, S); });
+  optional(P.tecky, 0.8, () => dots(gOver, S));
+  optional(P.paprsky, 0.7, () => rays(gOver));
+  // logo leží na všem kromě zrna, ať s obálkou drží pohromadě
+  if (logoBox) drawLogo();
+  optional(P.zrno, null, grain);
+  syncPanel();
+}
+
+// ─── Export (klávesy, bez UI) ─────────────────────────────────────────────────
+function download(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function snapshot(forPng) {
+  const clone = svg.cloneNode(true);
+  clone.removeAttribute('id');
+  clone.setAttribute('data-varianta', recipe()); // recept zůstane i v uloženém SVG
+  if (forPng) { clone.setAttribute('width', W); clone.setAttribute('height', H); }
+  else { clone.setAttribute('width', (W / DPI * 25.4).toFixed(2) + 'mm'); clone.setAttribute('height', (H / DPI * 25.4).toFixed(2) + 'mm'); }
+  return clone;
+}
+function exportSVG() {
+  download(new Blob([new XMLSerializer().serializeToString(snapshot(false))], { type: 'image/svg+xml' }), `eduamag-obalka-${seed}.svg`);
+}
+async function exportPNG() {
+  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(snapshot(true))], { type: 'image/svg+xml' }));
+  const img = new Image();
+  img.src = url;
+  await img.decode();
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  cv.getContext('2d').drawImage(img, 0, 0, W, H);
+  URL.revokeObjectURL(url);
+  cv.toBlob(b => download(b, `eduamag-obalka-${seed}.png`), 'image/png');
+}
+
+// ─── Panel ────────────────────────────────────────────────────────────────────
+const UI = {};
+const $ = id => document.getElementById(id);
+function h(tag, attrs, text) {
+  const n = document.createElement(tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+function setParam(k, v) { P[k] = v; generate(seed); }
+function buildPanel() {
+  CONTROLS.find(c => c.k === 'prvky').max = ELEMENTS.length;
+  const box = $('ovladani');
+  for (const c of CONTROLS) {
+    if (c.sec) { box.appendChild(h('h3', {}, c.sec)); continue; }
+    if ((c.k === 'prvky' || c.k === 'velikost' || c.list) && !ELEMENTS.length) continue;
+    const row = box.appendChild(h('div', { class: 'prvek' }));
+    const ui = UI[c.k] = { row };
+    if (c.list) {
+      const head = row.appendChild(h('div', { class: 'popis' }));
+      head.appendChild(h('span', {}, c.label));
+      ui.out = head.appendChild(h('span', { class: 'hodnota' }));
+      head.appendChild(h('button', { type: 'button', class: 'zpet', title: 'Zaškrtnout všechny' }, 'všechny'))
+        .addEventListener('click', () => setParam(c.k, null));
+      const list = row.appendChild(h('div', { class: 'seznam' }));
+      ui.checks = ELEMENTS.map(e => {
+        const item = list.appendChild(h('label', { title: e.name }));
+        const box = item.appendChild(h('input', { type: 'checkbox' }));
+        item.appendChild(h('img', { src: 'prvky/' + encodeURIComponent(e.name), alt: '' }));
+        item.appendChild(h('span', {}, e.name.replace(/\.[^.]+$/, '')));
+        box.addEventListener('change', () => {
+          const off = ui.checks.filter(([, b]) => !b.checked).map(([name]) => name);
+          setParam(c.k, off.length ? off : null);
+          box.blur();
+        });
+        return [e.name, box];
+      });
+    } else if (c.tri) {
+      row.classList.add('vradku');
+      row.appendChild(h('span', {}, c.label));
+      const seg = row.appendChild(h('div', { class: 'seg' }));
+      ui.btns = [[null, 'náhodně'], ['ano', 'ano'], ['ne', 'ne']].map(([v, t]) => {
+        const b = seg.appendChild(h('button', { type: 'button' }, t));
+        b.addEventListener('click', () => setParam(c.k, v));
+        return [v, b];
+      });
+    } else if (c.opts) {
+      row.classList.add('vradku');
+      row.appendChild(h('span', {}, c.label));
+      ui.sel = row.appendChild(h('select', {}));
+      ui.auto = ui.sel.appendChild(h('option', { value: '' }, 'náhodně'));
+      for (const v in c.opts) ui.sel.appendChild(h('option', { value: v }, c.opts[v]));
+      ui.sel.addEventListener('change', () => { setParam(c.k, ui.sel.value || null); ui.sel.blur(); });
+    } else {
+      const head = row.appendChild(h('div', { class: 'popis' }));
+      head.appendChild(h('span', {}, c.label));
+      ui.out = head.appendChild(h('span', { class: 'hodnota' }));
+      head.appendChild(h('button', { type: 'button', class: 'zpet', title: 'Nechat určit číslem varianty' }, 'náhodně'))
+        .addEventListener('click', () => setParam(c.k, null));
+      ui.range = row.appendChild(h('input', { type: 'range', min: c.min, max: c.max, step: c.step }));
+      ui.range.addEventListener('input', () => setParam(c.k, +ui.range.value));
+    }
+  }
+
+  $('cislo').addEventListener('change', e => { const v = parseInt(e.target.value, 10); if (Number.isFinite(v)) generate(v); });
+  $('nova').addEventListener('click', () => generate(newSeed()));
+  $('reset').addEventListener('click', () => { for (const k in P) P[k] = null; generate(seed); });
+  $('exp-svg').addEventListener('click', exportSVG);
+  $('exp-png').addEventListener('click', exportPNG);
+  $('skryt').addEventListener('click', togglePanel);
+  $('ukaz').addEventListener('click', togglePanel);
+  // po kliknutí myší tlačítko pustíme, ať mezerník dál dělá novou variantu
+  $('panel').addEventListener('click', e => { const b = e.target.closest('button'); if (b && e.detail > 0) b.blur(); });
+
+  const ta = $('titulky');
+  try { const saved = localStorage.getItem('eduamag-titulky'); if (saved) setTopics(saved); } catch (e) { /* bez úložiště */ }
+  ta.value = TOPICS.join('\n');
+  ta.addEventListener('input', () => { setTopics(ta.value); generate(seed); });
+  $('titulky-reset').addEventListener('click', () => { setTopics(''); ta.value = TOPICS.join('\n'); generate(seed); });
+}
+// panel ukazuje, co je nastavené ručně, a u „náhodně“ to, co vybrala varianta
+function syncPanel() {
+  for (const c of CONTROLS) {
+    const ui = UI[c.k], v = P[c.k];
+    if (!ui) continue;
+    ui.row.classList.toggle('rucne', v !== null);
+    if (ui.checks) {
+      ui.checks.forEach(([name, b]) => { b.checked = !(v || []).includes(name); });
+      ui.out.textContent = `${ELEMENTS.length - (v || []).length} z ${ELEMENTS.length}`;
+    }
+    else if (ui.btns) ui.btns.forEach(([bv, b]) => b.classList.toggle('aktivni', bv === v));
+    else if (ui.sel) {
+      ui.auto.textContent = 'náhodně' + (v === null && USED[c.k] ? ` (${c.opts[USED[c.k]]})` : '');
+      ui.sel.value = v || '';
+    } else {
+      ui.range.value = v !== null ? v : USED[c.k];
+      ui.out.textContent = INFO[c.k];
+    }
+  }
+  if (document.activeElement !== $('cislo')) $('cislo').value = seed;
+}
+function togglePanel() { document.body.classList.toggle('bez-panelu'); }
+
+// adresa → číslo varianty a ruční nastavení; neplatné hodnoty se berou jako „náhodně“
+function readHash() {
+  const [s, ...rest] = location.hash.slice(1).split('&');
+  const q = new URLSearchParams(rest.join('&'));
+  for (const c of CONTROLS) {
+    if (!c.k) continue;
+    const v = q.get(c.k), num = Number(v);
+    if (v === null || v === '') P[c.k] = null;
+    else if (c.opts) P[c.k] = v in c.opts ? v : null;
+    else if (c.tri) P[c.k] = v === 'ano' || v === 'ne' ? v : null;
+    else if (c.list) { const off = v.split('/').filter(name => ELEMENTS.some(e => e.name === name)); P[c.k] = off.length ? off : null; }
+    else P[c.k] = Number.isFinite(num) ? Math.min(c.max, Math.max(c.min, num)) : null;
+  }
+  const n = parseInt(s, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+const newSeed = () => Math.floor(Math.random() * 1e6);
+// vložení jiného čísla (nebo celého receptu) za # v adrese vygeneruje danou variantu bez načtení stránky
+window.addEventListener('hashchange', () => {
+  if (location.hash.slice(1) === recipe()) return;
+  const n = readHash();
+  if (n !== null) generate(n);
+});
+svg.addEventListener('click', () => generate(newSeed()));
+window.addEventListener('keydown', e => {
+  // při psaní do pole a u zkratek prohlížeče (⌘S, ⌘P…) se klávesy neberou
+  if (e.metaKey || e.ctrlKey || e.altKey || (e.target.matches && e.target.matches('textarea, input[type=number], select'))) return;
+  if (e.code === 'Space') { e.preventDefault(); generate(newSeed()); }
+  else if (e.key === 's' || e.key === 'S') exportSVG();
+  else if (e.key === 'p' || e.key === 'P') exportPNG();
+  else if (e.key === 'h' || e.key === 'H') togglePanel();
+});
+
+(async () => {
+  await Promise.all(Object.entries(FONT_URLS).map(async ([k, url]) => {
+    try {
+      const res = await fetch(url);
+      if (res.ok) FONTS[k] = opentype.parse(await res.arrayBuffer());
+    } catch (e) { /* písmo, které chybí, se jen nenabídne */ }
+  }));
+  const fontOpts = CONTROLS.find(c => c.k === 'pismo').opts;
+  for (const k in fontOpts) if (!FONTS[k]) delete fontOpts[k];
+  await loadElements();
+  buildPanel();
+  const fromHash = readHash();
+  generate(fromHash !== null ? fromHash : newSeed());
+})();
+</script>
+</body>
+</html>
