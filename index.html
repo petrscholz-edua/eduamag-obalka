@@ -143,6 +143,8 @@ const FONTS = {};
 // ─── Nastavení z panelu ───────────────────────────────────────────────────────
 // null = „náhodně“: hodnotu určí číslo varianty jako dřív. Co je nastavené ručně,
 // drží i při přepínání variant a zapisuje se do adresy za číslo (#406329&radky=7).
+// kompozice prvků na obálce bez titulků (viz composeFree)
+const LAYOUTS = { rozptyl: 'rozptyl', hromada: 'hromada', kruh: 'kruh', proud: 'proud', mrizka: 'mřížka', hrdina: 'hrdina' };
 const CONTROLS = [
   { sec: 'Text' },
   { k: 'radky', label: 'Počet řádků', min: 4, max: 20, step: 1 },
@@ -162,6 +164,7 @@ const CONTROLS = [
   // odškrtnuté prvky (názvy souborů); nový soubor ve složce je vždy zaškrtnutý
   { k: 'bez', label: 'Které prvky', list: true },
   { k: 'velikost', label: 'Velikost prvků', min: 40, max: 250, step: 5 },
+  { k: 'kompozice', label: 'Bez textu', opts: LAYOUTS },
   { k: 'schema', label: 'Pozadí', opts: { cerna: 'černá', uhlova: 'uhlová', hlubina: 'hlubina' } },
   { sec: 'Vrstvy' },
   { k: 'koule', label: 'Koule', tri: true },
@@ -262,12 +265,115 @@ function boxFree(cx, cy, size) {
   const a = { x1: cx - size.w / 2, x2: cx + size.w / 2, y1: cy - size.h / 2, y2: cy + size.h / 2 };
   return !placedBoxes.some(b => a.x1 < b.x2 + 60 && b.x1 < a.x2 + 60 && a.y1 < b.y2 + 60 && b.y1 < a.y2 + 60);
 }
-function placeElement(g, e, cx, cy, size) {
+function placeElement(g, e, cx, cy, size, rot = rnd(-4, 4)) {
   placedBoxes.push({ x1: cx - size.w / 2, x2: cx + size.w / 2, y1: cy - size.h / 2, y2: cy + size.h / 2 });
   el('image', {
     href: e.href, x: f1(cx - size.w / 2), y: f1(cy - size.h / 2), width: f1(size.w), height: f1(size.h),
-    transform: `rotate(${f1(rnd(-4, 4))} ${f1(cx)} ${f1(cy)})`,
+    transform: `rotate(${f1(rot)} ${f1(cx)} ${f1(cy)})`,
   }, g);
+}
+
+// ─── Kompozice bez textu ──────────────────────────────────────────────────────
+// Když nejsou titulky, prvky se neřadí do pomyslných řádků, ale skládají se do jedné z volných kompozic.
+function composeFree(g, items, kind, logoBox) {
+  const N = items.length;
+  if (!N) return;
+  const X0 = TRIM_L, X1 = TRIM_R, Y0 = BLEED + 80, Y1 = H - BLEED - 80, SW = X1 - X0, SH = Y1 - Y0;
+  const cell = Math.sqrt(SW * SH * 0.8 / N); // strana plochy, která připadá na jeden prvek
+  const sized = (e, h, maxW = Infinity) => { h = Math.min(h, maxW / e.ratio); return { h, w: h * e.ratio }; };
+  const clampX = (cx, s) => Math.min(X1 - s.w / 2, Math.max(X0 + s.w / 2, cx));
+  const clampY = (cy, s) => Math.min(Y1 - s.h / 2, Math.max(Y0 + s.h / 2, cy));
+  // logo zabírá pravý horní roh až k okrajům
+  const onLogo = (cx, cy, s, pad = 60) => !!logoBox && cx + s.w / 2 > logoBox.x1 - pad && cy - s.h / 2 < logoBox.y2 + pad;
+  // volné místo náhodným hledáním; když se nedaří, prvek se postupně zmenšuje
+  const scatter = (list, hOf, rotMax) => list.forEach(e => {
+    const h0 = hOf(e);
+    let last = null; // kdyby se volné místo nenašlo, aspoň ne přes logo
+    for (let t = 0; t < 400; t++) {
+      const s = sized(e, h0 * (1 - 0.6 * t / 400), cell * 1.6);
+      const cx = rnd(X0 + s.w / 2, X1 - s.w / 2), cy = rnd(Y0 + s.h / 2, Y1 - s.h / 2);
+      if (boxFree(cx, cy, s)) return placeElement(g, e, cx, cy, s, rnd(-rotMax, rotMax));
+      if (!onLogo(cx, cy, s, 0)) last = { cx, cy, s };
+    }
+    if (last) placeElement(g, e, last.cx, last.cy, last.s, rnd(-rotMax, rotMax));
+  });
+
+  if (kind === 'hrdina') {
+    // jeden obří prvek, ostatní drobné kolem
+    const [hero, ...rest] = items;
+    const s = sized(hero, H * rnd(0.5, 0.68) * Math.min(1.15, Math.max(0.8, elScale)), SW * 0.5);
+    let cx = clampX(W * rnd(0.2, 0.45), s), cy = clampY(H * rnd(0.5, 0.62), s);
+    if (onLogo(cx, cy, s)) cx = clampX(logoBox.x1 - 60 - s.w / 2, s);
+    if (onLogo(cx, cy, s)) cy = clampY(logoBox.y2 + 60 + s.h / 2, s);
+    placeElement(g, hero, cx, cy, s, rnd(-8, 8));
+    scatter(rest, () => cell * rnd(0.28, 0.5) * elScale, 20);
+  } else if (kind === 'hromada') {
+    // spirála od středu: uprostřed největší, ke kraji menší; prvky se smějí překrývat
+    const R = cell * Math.sqrt(N) * 0.33, px = W * rnd(0.24, 0.42), py = H * rnd(0.5, 0.6), a0 = rnd(0, 360);
+    items.map((e, i) => {
+      const r = R * Math.sqrt((i + 0.3) / N), a = (a0 + i * 137.5 + rnd(-12, 12)) * Math.PI / 180;
+      const s = sized(e, cell * rnd(0.5, 0.75) * (1 - 0.3 * i / N) * elScale, cell * 1.4);
+      return { e, s, cx: px + Math.cos(a) * r * 1.2, cy: py + Math.sin(a) * r };
+    }).reverse().forEach(p => {
+      p.cx = clampX(p.cx, p.s); p.cy = clampY(p.cy, p.s);
+      for (let t = 0; t < 80 && onLogo(p.cx, p.cy, p.s); t++) { p.cx = clampX(p.cx - 40, p.s); p.cy = clampY(p.cy + 25, p.s); }
+      placeElement(g, p.e, p.cx, p.cy, p.s, rnd(-25, 25));
+    });
+  } else if (kind === 'kruh') {
+    // elipsa přes desky; místa, která by zasáhla do loga, se vynechají – kruh se o logo opře
+    const ex = W * rnd(0.4, 0.5), ey = H * rnd(0.52, 0.58), rx = W * rnd(0.3, 0.36), ry = H * rnd(0.3, 0.36);
+    const ring = N >= 6 ? items.slice(1) : items, probe = { w: cell * 0.6, h: cell * 0.45 };
+    const a0 = rnd(0, Math.PI * 2), free = [];
+    for (let j = 0; j < 90; j++) {
+      const a = a0 + j * Math.PI * 2 / 90, cx = clampX(ex + Math.cos(a) * rx, probe), cy = clampY(ey + Math.sin(a) * ry, probe);
+      if (!onLogo(cx, cy, probe)) free.push({ cx, cy });
+    }
+    const arc = Math.PI * 2 * Math.sqrt((rx * rx + ry * ry) / 2) * free.length / 90 / ring.length;
+    const hSlot = Math.min(arc * 0.6, cell * 0.6) * elScale;
+    if (ring !== items) placeElement(g, items[0], ex, ey, sized(items[0], ry * rnd(0.7, 0.95), rx * 1.1), rnd(-10, 10));
+    ring.forEach((e, i) => {
+      const p = free[Math.floor((i + 0.5) * free.length / ring.length)], s = sized(e, hSlot * rnd(0.8, 1.15), hSlot * 1.6);
+      placeElement(g, e, clampX(p.cx, s), clampY(p.cy, s), s, rnd(-12, 12));
+    });
+  } else if (kind === 'proud') {
+    // vlnovka přes celé desky, prvky se lehce překrývají; velikost po cestě roste nebo klesá
+    const grow = chance(0.5), amp = H * rnd(0.1, 0.2), ph = rnd(0, Math.PI * 2), waves = rnd(0.7, 1.4), y0 = H * rnd(0.48, 0.6);
+    let sizes = items.map((e, i) => {
+      const t = N > 1 ? i / (N - 1) : 0.5;
+      return sized(e, cell * (0.35 + 0.6 * (grow ? t : 1 - t)) * rnd(0.85, 1.15) * elScale, cell * 1.5);
+    });
+    const STEP = 0.7, run = s => s.reduce((a, x) => a + x.w * STEP, 0) + s[N - 1].w * (1 - STEP);
+    const k = Math.min(1, SW * 0.97 / run(sizes));
+    sizes = sizes.map(s => ({ w: s.w * k, h: s.h * k }));
+    let x = X0 + (SW - run(sizes)) / 2;
+    items.forEach((e, i) => {
+      const s = sizes[i], cx = x + s.w / 2, w = ph + (cx - X0) / SW * waves * Math.PI * 2;
+      let cy = clampY(y0 + amp * Math.sin(w), s);
+      if (onLogo(cx, cy, s)) cy = clampY(logoBox.y2 + 60 + s.h / 2, s);
+      const slope = Math.atan(amp * Math.cos(w) * waves * Math.PI * 2 / SW) * 180 / Math.PI;
+      placeElement(g, e, cx, cy, s, slope * 0.7 + rnd(-6, 6));
+      x += s.w * STEP;
+    });
+  } else if (kind === 'mrizka') {
+    // nejmenší mřížka, do které se prvky vejdou i po vynechání polí pod logem
+    for (let cols = Math.ceil(Math.sqrt(N * 1.4)); ; cols++) {
+      const rows = Math.max(2, Math.round(cols * SH / SW)), cw = SW / cols, ch = SH / rows, cells = [];
+      const probe = { w: cw * 0.78, h: ch * 0.62 };
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+        const cx = X0 + (c + 0.5) * cw, cy = Y0 + (r + 0.5) * ch;
+        if (!onLogo(cx, cy, probe, 0)) cells.push({ cx, cy });
+      }
+      if (cells.length < N) continue;
+      items.forEach((e, i) => {
+        const c = cells[Math.floor(i * cells.length / N)], s = sized(e, ch * 0.62 * Math.min(1, elScale), cw * 0.78);
+        placeElement(g, e, c.cx + rnd(-0.04, 0.04) * cw, c.cy + rnd(-0.04, 0.04) * ch, s, rnd(-3, 3));
+      });
+      break;
+    }
+  } else {
+    // rozptyl: pár velkých, hodně malých, volně po ploše
+    scatter(items, () => cell * (chance(0.3) ? rnd(0.75, 1.1) : rnd(0.32, 0.6)) * elScale, 20);
+  }
 }
 
 // ─── RNG ──────────────────────────────────────────────────────────────────────
@@ -501,19 +607,57 @@ function rays(g) {
   el('circle', { cx: f1(cx), cy: f1(cy), r: 10, fill: '#ffffff' }, g);
 }
 
-// zrno a tiskový „prach“ (samostatné vrstvy, v Illustratoru jdou smazat)
+// Papírová textura ve třech samostatných vrstvách (v Illustratoru jdou smazat):
+// „textura“ = měkké nerovnoměrné mapy, „zrno“ = jemné zrno, které místy houstne a místy řídne,
+// „prach“ = vlákna a smítka různých velikostí kreslená jako křivky. Zrno světlá místa ztmavuje
+// a tmavá zesvětluje, takže drží na černé i na bílých a modrých plochách.
 function grain() {
-  const fid = nid('gr');
-  const f = el('filter', { id: fid, x: 0, y: 0, width: W, height: H, filterUnits: 'userSpaceOnUse' }, defs);
-  el('feTurbulence', { type: 'fractalNoise', baseFrequency: 0.95, numOctaves: 2, seed: rint(1, 999), stitchTiles: 'stitch' }, f);
-  el('feColorMatrix', { type: 'saturate', values: 0 }, f);
-  el('rect', { id: 'zrno', x: 0, y: 0, width: W, height: H, filter: `url(#${fid})`, opacity: 0.05 }, svg);
-  const fid2 = nid('sp');
-  const f2 = el('filter', { id: fid2, x: 0, y: 0, width: W, height: H, filterUnits: 'userSpaceOnUse' }, defs);
-  el('feTurbulence', { type: 'fractalNoise', baseFrequency: 0.6, numOctaves: 1, seed: rint(1, 999) }, f2);
-  // jen řídké světlé tečky (práh na šumu)
-  el('feColorMatrix', { type: 'matrix', values: '0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  24 0 0 0 -17.2' }, f2);
-  el('rect', { id: 'prach', x: 0, y: 0, width: W, height: H, filter: `url(#${fid2})`, opacity: 0.35 }, svg);
+  const region = { x: 0, y: 0, width: W, height: H, filterUnits: 'userSpaceOnUse', 'color-interpolation-filters': 'sRGB' };
+  // šum → nad středem bílá, pod středem černá, krytí podle odchylky od středu (table)
+  const bipolar = (f, name, table) => {
+    el('feColorMatrix', { in: name, type: 'matrix', values: '1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  1 0 0 0 0', result: name + 'g' }, f);
+    const t = el('feComponentTransfer', { in: name + 'g', result: name + 'b' }, f);
+    ['R', 'G', 'B'].forEach(c => el('feFunc' + c, { type: 'discrete', tableValues: '0 1' }, t));
+    el('feFuncA', { type: 'table', tableValues: table }, t);
+  };
+
+  const f1id = nid('tx'), fa = el('filter', { id: f1id, ...region }, defs);
+  el('feTurbulence', { type: 'fractalNoise', baseFrequency: '0.0016 0.0023', numOctaves: 4, seed: rint(1, 999), result: 'c' }, fa);
+  bipolar(fa, 'c', '1 0 1');
+  el('rect', { id: 'textura', x: 0, y: 0, width: W, height: H, filter: `url(#${f1id})`, opacity: 0.1 }, svg);
+
+  const f2id = nid('gr'), fb = el('filter', { id: f2id, ...region }, defs);
+  el('feTurbulence', { type: 'fractalNoise', baseFrequency: 0.45, numOctaves: 3, seed: rint(1, 999), result: 'n' }, fb);
+  bipolar(fb, 'n', '1 1 0 1 1');
+  // hustota zrna se po ploše mění
+  el('feTurbulence', { type: 'fractalNoise', baseFrequency: 0.005, numOctaves: 2, seed: rint(1, 999), result: 'm' }, fb);
+  el('feColorMatrix', { in: 'm', type: 'matrix', values: '0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  2.2 0 0 0 -0.45', result: 'mm' }, fb);
+  el('feComposite', { in: 'nb', in2: 'mm', operator: 'in' }, fb);
+  el('rect', { id: 'zrno', x: 0, y: 0, width: W, height: H, filter: `url(#${f2id})`, opacity: 0.15 }, svg);
+
+  const g = el('g', { id: 'prach', fill: 'none', 'stroke-linecap': 'round' }, svg);
+  // vlákno: krátký zkroucený chloupek, občas delší
+  const hair = () => {
+    const x = rnd(0, W), y = rnd(0, H), len = rnd(14, 55) * (chance(0.05) ? 3 : 1), a = rnd(0, Math.PI * 2), bend = rnd(-1.6, 1.6);
+    const p = (t, da) => `${f1(x + Math.cos(a + da) * len * t)} ${f1(y + Math.sin(a + da) * len * t)}`;
+    return `M${f1(x)} ${f1(y)}C${p(0.33, bend * 0.2)} ${p(0.66, bend * 0.6)} ${p(1, bend)}`;
+  };
+  // smítko: většinou sotva viditelná tečka, výjimečně větší nepravidelný flíček; část se drží ve shlucích
+  const hubs = Array.from({ length: 9 }, () => [rnd(0, W), rnd(0, H)]);
+  const speck = () => {
+    const r = 1.2 + 8 * Math.pow(R(), 5), hub = pick(hubs), near = chance(0.3);
+    const x = near ? hub[0] + (rnd(-1, 1) + rnd(-1, 1)) * 260 : rnd(0, W), y = near ? hub[1] + (rnd(-1, 1) + rnd(-1, 1)) * 260 : rnd(0, H);
+    if (r < 3) return circleD(x, y, r);
+    const n = rint(5, 7), a0 = rnd(0, 6.28);
+    return smoothPath(Array.from({ length: n }, (_, i) => { const a = a0 + i / n * Math.PI * 2, rr = r * rnd(0.5, 1.35); return [x + Math.cos(a) * rr, y + Math.sin(a) * rr]; }), true);
+  };
+  const many = (count, make) => { let d = ''; for (let i = 0; i < count; i++) d += make(); return d; };
+  [[1100, 0.07, 1.3], [900, 0.11, 1.7], [400, 0.18, 2.1]].forEach(([count, o, w]) =>
+    el('path', { d: many(count, hair), stroke: '#fff', 'stroke-width': w, opacity: o }, g));
+  el('path', { d: many(500, hair), stroke: '#000', 'stroke-width': 2, opacity: 0.22 }, g);
+  [[260, 0.25], [170, 0.45], [70, 0.7]].forEach(([count, o]) =>
+    el('path', { d: many(count, speck), fill: '#fff', opacity: o }, g));
+  el('path', { d: many(150, speck), fill: '#000', opacity: 0.35 }, g);
 }
 
 // ─── Generování ───────────────────────────────────────────────────────────────
@@ -637,14 +781,18 @@ function generate(newSeed) {
     const first = nextTopic();
     const startX = winFrom !== null
       ? winFrom + rnd(0, W * 0.05)
-      : (chance(0.75) ? -rnd(0.05, 0.75) * rowWidth(first, fontKey, fsRow, caseMode) : rnd(0.02, 0.22) * W);
+      : (chance(0.75) || noVoid ? -rnd(0.05, 0.75) * rowWidth(first, fontKey, fsRow, caseMode) : rnd(0.02, 0.22) * W);
     // řádek končí tam, kde skončí celé sdělení – buď za okrajem desek, nebo na hraně prázdného tvaru
     const fillTo = winTo !== null ? winTo : (chance(0.15) && !noVoid ? W * rnd(0.68, 0.9) : W * rnd(1.02, 1.3));
     let text = first;
     let guard = 0;
-    while (guard++ < 12) {
-      const next = ' '.repeat(rint(4, 9)) + nextTopic();
-      if (startX + rowWidth(text + next, fontKey, fsRow, caseMode) > fillTo) break;
+    while (guard++ < 40) {
+      // bez prázdného místa jsou i mezery mezi sděleními užší (3–5 místo 4–9 mezer)
+      const sep = rint(4, 9);
+      const next = ' '.repeat(noVoid ? 3 + sep % 3 : sep) + nextTopic();
+      // a přidává se, dokud text nepřeteče přes pravý okraj (poslední sdělení se ořízne)
+      if (noVoid ? startX + rowWidth(text, fontKey, fsRow, caseMode) > W
+        : startX + rowWidth(text + next, fontKey, fsRow, caseMode) > fillTo) break;
       text += next;
     }
     // do řádku se vkládají prvky: mezera mezi slovy se roztáhne přesně na šířku prvku.
@@ -695,8 +843,13 @@ function generate(newSeed) {
 
   // co se nevešlo do věty, doplníme do volného místa na řádku: nejdřív v plné velikosti,
   // pak postupně menší; až když není kam, položí se prvek přes text.
-  // Bez titulků se takhle – volně po řádcích – rozmístí všechny prvky.
+  // Bez titulků se prvky skládají do volné kompozice (composeFree).
   const gapsBySize = shuffle(allGaps).sort((a, b) => (b.x2 - b.x1) - (a.x2 - a.x1));
+  USED.kompozice = null;
+  if (!hasText) {
+    USED.kompozice = weighted([['rozptyl', 3], ['hromada', 2], ['kruh', 2], ['proud', 2], ['mrizka', 1], ['hrdina', 2]]);
+    composeFree(gEl, toPlace.splice(0), P.kompozice || USED.kompozice, logoBox);
+  }
   toPlace.forEach(e => {
     for (let shrink = 1; shrink > 0.35; shrink *= 0.8) {
       for (const gp of gapsBySize) {
@@ -712,7 +865,7 @@ function generate(newSeed) {
       }
     }
     for (let t = 0; t < 300; t++) {
-      const size = elementSize(e, rowH * 0.75, rowH, hasText, 1 - 0.7 * t / 300);
+      const size = elementSize(e, rowH * 0.75, rowH, true, 1 - 0.7 * t / 300);
       const cx = rnd(TRIM_L + size.w / 2, TRIM_R - size.w / 2), cy = (rint(0, n - 1) + 0.5) * rowH;
       if (boxFree(cx, cy, size) || t === 299) return placeElement(gEl, e, cx, cy, size);
     }
