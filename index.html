@@ -37,6 +37,8 @@
   .hlava { justify-content: space-between; margin-bottom: 12px; }
   .hlava strong { color: #fff; }
   .rada > input { flex: 1; min-width: 0; }
+  #panel #zamichat { display: block; width: 100%; margin-top: 8px; padding: 7px 8px; background: #003de5; border-color: #003de5; color: #fff; font-weight: 600; }
+  #panel #zamichat:hover { background: #1f55ff; }
   .rada.dole { margin-top: 18px; }
   .rada.dole button { flex: 1 1 auto; }
   .prvek { margin-bottom: 10px; }
@@ -86,6 +88,7 @@
     <input id="cislo" type="number" min="0" step="1">
     <button id="nova" type="button" title="Nová varianta (mezerník nebo klik do obálky)">Nová</button>
   </div>
+  <button id="zamichat" type="button" title="Všechna nastavení zpět na náhodně a k tomu nová varianta (R). Výběr prvků a titulky zůstávají.">Zamíchat vše</button>
   <div id="ovladani"></div>
   <details>
     <summary>Titulky</summary>
@@ -988,6 +991,7 @@ function buildPanel() {
 
   $('cislo').addEventListener('change', e => { const v = parseInt(e.target.value, 10); if (Number.isFinite(v)) generate(v); });
   $('nova').addEventListener('click', () => generate(newSeed()));
+  $('zamichat').addEventListener('click', shuffleAll);
   $('reset').addEventListener('click', () => { for (const k in P) P[k] = null; generate(seed); });
   $('exp-svg').addEventListener('click', exportSVG);
   $('exp-png').addEventListener('click', exportPNG);
@@ -1024,6 +1028,12 @@ function syncPanel() {
   if (document.activeElement !== $('cislo')) $('cislo').value = seed;
 }
 function togglePanel() { document.body.classList.toggle('bez-panelu'); }
+// jedním krokem: všechno ruční nastavení zpět na náhodně a nová varianta;
+// výběr prvků (a titulky) jsou obsah, ne nastavení, takže zůstávají
+function shuffleAll() {
+  for (const k in P) if (k !== 'bez') P[k] = null;
+  generate(newSeed());
+}
 
 // adresa → číslo varianty a ruční nastavení; neplatné hodnoty se berou jako „náhodně“
 function readHash() {
@@ -1057,6 +1067,7 @@ window.addEventListener('keydown', e => {
   else if (e.key === 's' || e.key === 'S') exportSVG();
   else if (e.key === 'p' || e.key === 'P') exportPNG();
   else if (e.key === 'h' || e.key === 'H') togglePanel();
+  else if (e.key === 'r' || e.key === 'R') shuffleAll();
 });
 
 (async () => {
