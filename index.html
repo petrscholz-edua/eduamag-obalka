@@ -290,13 +290,17 @@ function composeFree(g, items, kind, logoBox) {
   const clampY = (cy, s) => Math.min(Y1 - s.h / 2, Math.max(Y0 + s.h / 2, cy));
   // logo zabírá pravý horní roh až k okrajům
   const onLogo = (cx, cy, s, pad = 60) => !!logoBox && cx + s.w / 2 > logoBox.x1 - pad && cy - s.h / 2 < logoBox.y2 + pad;
-  // volné místo náhodným hledáním; když se nedaří, prvek se postupně zmenšuje
-  const scatter = (list, hOf, rotMax) => list.forEach(e => {
+  // Těžiště kompozic patří na titulní stranu, tedy na pravou polovinu desek pod logo.
+  const topY = logoBox ? logoBox.y2 + 60 : Y0;            // odkud je na titulní straně volno
+  const frontX = () => W * rnd(0.62, 0.78), frontY = () => topY + (Y1 - topY) * rnd(0.42, 0.58);
+  // volné místo náhodným hledáním; když se nedaří, prvek se postupně zmenšuje.
+  // xOf určuje, kam se míří: bez něj po celé šířce s převahou vpravo, která s dalšími pokusy slábne
+  const scatter = (list, hOf, rotMax, xOf = (s, t) => X0 + s.w / 2 + (SW - s.w) * Math.pow(R(), 0.55 + 0.45 * t / 400)) => list.forEach(e => {
     const h0 = hOf(e);
     let last = null; // kdyby se volné místo nenašlo, aspoň ne přes logo
     for (let t = 0; t < 400; t++) {
       const s = sized(e, h0 * (1 - 0.6 * t / 400), cell * 1.6);
-      const cx = rnd(X0 + s.w / 2, X1 - s.w / 2), cy = rnd(Y0 + s.h / 2, Y1 - s.h / 2);
+      const cx = clampX(xOf(s, t), s), cy = rnd(Y0 + s.h / 2, Y1 - s.h / 2);
       if (boxFree(cx, cy, s)) return placeElement(g, e, cx, cy, s, rnd(-rotMax, rotMax));
       if (!onLogo(cx, cy, s, 0)) last = { cx, cy, s };
     }
@@ -306,19 +310,17 @@ function composeFree(g, items, kind, logoBox) {
   if (kind === 'hrdina') {
     // jeden obří prvek, ostatní drobné kolem
     const [hero, ...rest] = items;
-    const s = sized(hero, H * rnd(0.5, 0.68) * Math.min(1.15, Math.max(0.8, elScale)), SW * 0.5);
-    let cx = clampX(W * rnd(0.2, 0.45), s), cy = clampY(H * rnd(0.5, 0.62), s);
-    if (onLogo(cx, cy, s)) cx = clampX(logoBox.x1 - 60 - s.w / 2, s);
-    if (onLogo(cx, cy, s)) cy = clampY(logoBox.y2 + 60 + s.h / 2, s);
+    const s = sized(hero, Math.min(H * rnd(0.5, 0.68) * Math.min(1.15, Math.max(0.8, elScale)), Y1 - topY), SW * 0.45);
+    const cx = clampX(frontX(), s), cy = Math.max(clampY(frontY(), s), topY + s.h / 2);
     placeElement(g, hero, cx, cy, s, rnd(-8, 8));
-    scatter(rest, () => cell * rnd(0.28, 0.5) * elScale, 20);
+    scatter(rest, () => cell * rnd(0.28, 0.5) * elScale, 20, () => cx + (rnd(-1, 1) + rnd(-1, 1)) * SW * 0.26);
   } else if (kind === 'hromada') {
     // spirála od středu: uprostřed největší, ke kraji menší; prvky se smějí překrývat
-    const R = cell * Math.sqrt(N) * 0.33, px = W * rnd(0.24, 0.42), py = H * rnd(0.5, 0.6), a0 = rnd(0, 360);
+    const R = cell * Math.sqrt(N) * 0.33, px = frontX(), py = frontY(), a0 = rnd(0, 360);
     items.map((e, i) => {
       const r = R * Math.sqrt((i + 0.3) / N), a = (a0 + i * 137.5 + rnd(-12, 12)) * Math.PI / 180;
       const s = sized(e, cell * rnd(0.5, 0.75) * (1 - 0.3 * i / N) * elScale, cell * 1.4);
-      return { e, s, cx: px + Math.cos(a) * r * 1.2, cy: py + Math.sin(a) * r };
+      return { e, s, cx: px + Math.cos(a) * r * 1.1, cy: py + Math.sin(a) * r };
     }).reverse().forEach(p => {
       p.cx = clampX(p.cx, p.s); p.cy = clampY(p.cy, p.s);
       for (let t = 0; t < 80 && onLogo(p.cx, p.cy, p.s); t++) { p.cx = clampX(p.cx - 40, p.s); p.cy = clampY(p.cy + 25, p.s); }
@@ -326,7 +328,7 @@ function composeFree(g, items, kind, logoBox) {
     });
   } else if (kind === 'kruh') {
     // elipsa přes desky; místa, která by zasáhla do loga, se vynechají – kruh se o logo opře
-    const ex = W * rnd(0.4, 0.5), ey = H * rnd(0.52, 0.58), rx = W * rnd(0.3, 0.36), ry = H * rnd(0.3, 0.36);
+    const ex = W * rnd(0.56, 0.64), ey = H * rnd(0.54, 0.6), rx = W * rnd(0.26, 0.32), ry = H * rnd(0.3, 0.36);
     const ring = N >= 6 ? items.slice(1) : items, probe = { w: cell * 0.6, h: cell * 0.45 };
     const a0 = rnd(0, Math.PI * 2), free = [];
     for (let j = 0; j < 90; j++) {
@@ -342,7 +344,7 @@ function composeFree(g, items, kind, logoBox) {
     });
   } else if (kind === 'proud') {
     // vlnovka přes celé desky, prvky se lehce překrývají; velikost po cestě roste nebo klesá
-    const grow = chance(0.5), amp = H * rnd(0.1, 0.2), ph = rnd(0, Math.PI * 2), waves = rnd(0.7, 1.4), y0 = H * rnd(0.48, 0.6);
+    const grow = chance(0.8), amp = H * rnd(0.1, 0.2), ph = rnd(0, Math.PI * 2), waves = rnd(0.7, 1.4), y0 = H * rnd(0.48, 0.6);
     let sizes = items.map((e, i) => {
       const t = N > 1 ? i / (N - 1) : 0.5;
       return sized(e, cell * (0.35 + 0.6 * (grow ? t : 1 - t)) * rnd(0.85, 1.15) * elScale, cell * 1.5);
@@ -369,15 +371,20 @@ function composeFree(g, items, kind, logoBox) {
         if (!onLogo(cx, cy, probe, 0)) cells.push({ cx, cy });
       }
       if (cells.length < N) continue;
+      // volná pole zůstanou vlevo: mřížka se plní po sloupcích od titulní strany
+      cells.sort((a, b) => b.cx - a.cx || a.cy - b.cy);
       items.forEach((e, i) => {
-        const c = cells[Math.floor(i * cells.length / N)], s = sized(e, ch * 0.62 * Math.min(1, elScale), cw * 0.78);
+        const c = cells[i], s = sized(e, ch * 0.62 * Math.min(1, elScale), cw * 0.78);
         placeElement(g, e, c.cx + rnd(-0.04, 0.04) * cw, c.cy + rnd(-0.04, 0.04) * ch, s, rnd(-3, 3));
       });
       break;
     }
   } else {
-    // rozptyl: pár velkých, hodně malých, volně po ploše
-    scatter(items, () => cell * (chance(0.3) ? rnd(0.75, 1.1) : rnd(0.32, 0.6)) * elScale, 20);
+    // rozptyl: pár velkých, hodně malých, volně po ploše; velké se drží titulní strany
+    const hs = new Map(items.map(e => [e, cell * (chance(0.3) ? rnd(0.75, 1.1) : rnd(0.32, 0.6)) * elScale]));
+    const bySize = [...items].sort((a, b) => hs.get(b) - hs.get(a)), isBig = e => hs.get(e) >= cell * 0.7 * elScale;
+    scatter(bySize.filter(isBig), e => hs.get(e), 20, (s, t) => frontX() + rnd(-1, 1) * SW * (0.1 + 0.5 * t / 400));
+    scatter(bySize.filter(e => !isBig(e)), e => hs.get(e), 20);
   }
 }
 
