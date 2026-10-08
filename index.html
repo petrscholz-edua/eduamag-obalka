@@ -166,6 +166,7 @@ const CONTROLS = [
   { k: 'velikost', label: 'Velikost prvků', min: 40, max: 250, step: 5 },
   { k: 'kompozice', label: 'Bez textu', opts: LAYOUTS },
   { k: 'schema', label: 'Pozadí', opts: { cerna: 'černá', uhlova: 'uhlová', hlubina: 'hlubina' } },
+  { k: 'zare', label: 'Modrá záře', min: 0, max: 100, step: 5 },
   { sec: 'Vrstvy' },
   { k: 'koule', label: 'Koule', tri: true },
   { k: 'odznak', label: 'Odznak', tri: true },
@@ -535,11 +536,11 @@ const SCHEMES = [
   // vždy tmavé pozadí: černá, uhlová s modrým nádechem, tmavě modrá „hlubina“
   { name: 'cerna', weight: 3, base: ['#040404', '#0a0a0a', '#050505'], light: ['#003de5', '#1f55ff', '#003de5'], dark: '#000000', text: '#ffffff', ink: '#3d6dff', badge: '#003de5', badgeLine: '#ffffff' },
   { name: 'uhlova', weight: 3, base: ['#05060c', '#0b0f1e', '#07080f'], light: ['#003de5', '#4a78ff', '#1f55ff'], dark: '#000000', text: '#ffffff', ink: '#4a78ff', badge: '#003de5', badgeLine: '#ffffff' },
-  { name: 'hlubina', weight: 2, base: ['#000617', '#000f3d', '#00072a'], light: ['#3d6dff', '#003de5', '#a9c8ff'], dark: '#000000', text: '#ffffff', ink: '#6f9dff', badge: '#003de5', badgeLine: '#ffffff' },
+  { name: 'hlubina', weight: 1, base: ['#00040f', '#000a29', '#00051b'], light: ['#3d6dff', '#003de5', '#a9c8ff'], dark: '#000000', text: '#ffffff', ink: '#6f9dff', badge: '#003de5', badgeLine: '#ffffff' },
 ];
 
 // ─── Pozadí a prvky ───────────────────────────────────────────────────────────
-function background(S) {
+function background(S, glow) {
   const lg = nid('lg'), a = rnd(0, Math.PI * 2);
   const g = el('linearGradient', { id: lg, x1: f1(0.5 - Math.cos(a) / 2), y1: f1(0.5 - Math.sin(a) / 2), x2: f1(0.5 + Math.cos(a) / 2), y2: f1(0.5 + Math.sin(a) / 2) }, defs);
   S.base.forEach((c, i) => el('stop', { offset: i / (S.base.length - 1), 'stop-color': c }, g));
@@ -547,7 +548,7 @@ function background(S) {
   const gl = el('g', { id: 'svetla' }, svg);
   for (let i = rint(2, 3); i > 0; i--) {
     const c = pick(S.light);
-    el('ellipse', { cx: f1(rnd(0, W)), cy: f1(rnd(H * 0.2, H * 1.05)), rx: f1(rnd(900, 2200)), ry: f1(rnd(600, 1400)), fill: radial([[0, c, rnd(0.35, 0.65)], [1, c, 0]]) }, gl);
+    el('ellipse', { cx: f1(rnd(0, W)), cy: f1(rnd(H * 0.2, H * 1.05)), rx: f1(rnd(900, 2200)), ry: f1(rnd(600, 1400)), fill: radial([[0, c, f1(rnd(0.35, 0.65) * glow * 100) / 100], [1, c, 0]]) }, gl);
   }
   el('ellipse', { cx: f1(rnd(0, W)), cy: f1(rnd(0, H)), rx: f1(rnd(1200, 2400)), ry: f1(rnd(900, 1600)), fill: radial([[0, S.dark, rnd(0.35, 0.6)], [1, S.dark, 0]]) }, gl);
 }
@@ -607,10 +608,10 @@ function rays(g) {
   el('circle', { cx: f1(cx), cy: f1(cy), r: 10, fill: '#ffffff' }, g);
 }
 
-// Papírová textura ve třech samostatných vrstvách (v Illustratoru jdou smazat):
-// „textura“ = měkké nerovnoměrné mapy, „zrno“ = jemné zrno, které místy houstne a místy řídne,
-// „prach“ = smítka různých velikostí kreslená jako křivky. Zrno světlá místa ztmavuje
-// a tmavá zesvětluje, takže drží na černé i na bílých a modrých plochách.
+// Papírová textura ve dvou samostatných vrstvách (v Illustratoru jdou smazat):
+// „zrno“ = jemné zrno, které místy houstne a místy řídne, „prach“ = smítka různých velikostí
+// kreslená jako křivky. Zrno světlá místa ztmavuje a tmavá zesvětluje, takže drží na černé
+// i na bílých a modrých plochách.
 function grain() {
   const region = { x: 0, y: 0, width: W, height: H, filterUnits: 'userSpaceOnUse', 'color-interpolation-filters': 'sRGB' };
   // šum → nad středem bílá, pod středem černá, krytí podle odchylky od středu (table)
@@ -620,11 +621,6 @@ function grain() {
     ['R', 'G', 'B'].forEach(c => el('feFunc' + c, { type: 'discrete', tableValues: '0 1' }, t));
     el('feFuncA', { type: 'table', tableValues: table }, t);
   };
-
-  const f1id = nid('tx'), fa = el('filter', { id: f1id, ...region }, defs);
-  el('feTurbulence', { type: 'fractalNoise', baseFrequency: '0.0016 0.0023', numOctaves: 4, seed: rint(1, 999), result: 'c' }, fa);
-  bipolar(fa, 'c', '1 0 1');
-  el('rect', { id: 'textura', x: 0, y: 0, width: W, height: H, filter: `url(#${f1id})`, opacity: 0.1 }, svg);
 
   const f2id = nid('gr'), fb = el('filter', { id: f2id, ...region }, defs);
   el('feTurbulence', { type: 'fractalNoise', baseFrequency: 0.45, numOctaves: 3, seed: rint(1, 999), result: 'n' }, fb);
@@ -682,7 +678,12 @@ function generate(newSeed) {
   const S = SCHEMES.find(s => s.name === P.schema) || schemeAuto;
   USED.schema = schemeAuto.name;
 
-  background(S);
+  // síla modré záře v pozadí; losuje se stranou, aby se zbytek varianty nepohnul
+  const rs = R.state(), glowAuto = Math.round(rnd(30, 70));
+  R.state(rs);
+  USED.zare = glowAuto;
+  INFO.zare = (P.zare === null ? glowAuto : P.zare) + ' %';
+  background(S, (P.zare === null ? glowAuto : P.zare) / 100);
   optional(P.koule, 0.85, sphere);
 
   // řádky textu přes celou plochu, každý řádek jedno téma
