@@ -753,12 +753,15 @@ function generate(newSeed) {
   const nextTopic = () => (queue.length ? queue : (queue = shuffle(TOPICS))).pop();
   const gText = el('g', { id: 'text' }, svg);
   const gEl = el('g', { id: 'prvky-kolaz' }, svg);
-  // na obálce jsou vždy všechny zaškrtnuté prvky ze složky; posuvníkem jde počet ubrat
+  // Ze zaškrtnutých prvků se jich na obálku dostane náhodný počet (zhruba 40–100 %), pokaždé jiný výběr;
+  // posuvníkem jde počet určit ručně – na maximu jsou tam vždy všechny.
+  // Losuje se stranou, aby varianty, kterým vyjdou všechny prvky, zůstaly stejné jako dřív.
   const pool = shuffle(ELEMENTS).filter(e => !(P.bez || []).includes(e.name));
-  const elAuto = pool.length;
+  const rsCount = R.state(), elAuto = pool.length ? rint(Math.min(pool.length, Math.max(3, Math.ceil(pool.length * 0.4))), pool.length) : 0;
+  R.state(rsCount);
   const scaleAuto = rnd(0.7, 1.3);
   elScale = P.velikost ? P.velikost / 100 : scaleAuto;
-  const elCount = P.prvky === null ? elAuto : Math.min(elAuto, P.prvky);
+  const elCount = P.prvky === null ? elAuto : Math.min(pool.length, P.prvky);
   const toPlace = pool.slice(0, elCount);
   placedBoxes.length = 0;
   // místo pod logem je obsazené: prvky koláže se mu vyhnou, text pod nálepkami prostě zmizí
