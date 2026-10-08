@@ -17,6 +17,8 @@
     aspect-ratio: 5198 / 3744;
     display: block;
     cursor: pointer;
+    /* šachovnice je vidět jen tam, kde je obálka průhledná (vypnuté pozadí) */
+    background: repeating-conic-gradient(#1c1c1c 0 25%, #242424 0 50%) 0 0 / 28px 28px;
   }
   #panel {
     position: fixed; top: 0; right: 0; bottom: 0; width: var(--panel); overflow-y: auto; padding: 14px 16px 28px;
@@ -165,9 +167,11 @@ const CONTROLS = [
   { k: 'bez', label: 'Které prvky', list: true },
   { k: 'velikost', label: 'Velikost prvků', min: 40, max: 250, step: 5 },
   { k: 'kompozice', label: 'Bez textu', opts: LAYOUTS },
-  { k: 'schema', label: 'Pozadí', opts: { cerna: 'černá', uhlova: 'uhlová', hlubina: 'hlubina' } },
+  { k: 'schema', label: 'Barva pozadí', opts: { cerna: 'černá', uhlova: 'uhlová', hlubina: 'hlubina' } },
   { k: 'zare', label: 'Modrá záře', min: 0, max: 100, step: 5 },
   { sec: 'Vrstvy' },
+  // bez pozadí je obálka průhledná (v náhledu šachovnice), i v uloženém SVG a PNG
+  { k: 'pozadi', label: 'Pozadí', tri: true },
   { k: 'koule', label: 'Koule', tri: true },
   { k: 'odznak', label: 'Odznak', tri: true },
   { k: 'cmaranice', label: 'Čmáranice', tri: true },
@@ -683,7 +687,7 @@ function generate(newSeed) {
   R.state(rs);
   USED.zare = glowAuto;
   INFO.zare = (P.zare === null ? glowAuto : P.zare) + ' %';
-  background(S, (P.zare === null ? glowAuto : P.zare) / 100);
+  optional(P.pozadi, null, () => background(S, (P.zare === null ? glowAuto : P.zare) / 100));
   optional(P.koule, 0.85, sphere);
 
   // řádky textu přes celou plochu, každý řádek jedno téma
