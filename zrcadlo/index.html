@@ -61,6 +61,15 @@
   .pozn { color: #7d7d7d; margin-top: 4px; }
   #ukaz { position: fixed; top: 12px; right: 12px; display: none; color: #d8d8d8; font: 12px/1.4 -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; }
   body.bez-panelu #ukaz { display: block; }
+  /* úzké okno a telefon: obálka nahoře, panel pod ní */
+  @media (max-width: 760px) {
+    body { --art-h: min(calc((100vw - 16px) * 3744 / 5198 + 16px), 55vh); }
+    #stage { inset: 0 0 auto 0; height: var(--art-h); }
+    #obalka { width: min(calc(100vw - 16px), calc((var(--art-h) - 16px) * 5198 / 3744)); }
+    #panel { top: var(--art-h); width: 100vw; border-left: 0; border-top: 1px solid #2d2d2d; }
+    body.bez-panelu #stage { inset: 0; height: auto; }
+    body.bez-panelu #obalka { width: min(calc(100vw - 16px), calc((100vh - 16px) * 5198 / 3744)); }
+  }
 </style>
 </head>
 <body>
