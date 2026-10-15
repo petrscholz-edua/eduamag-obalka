@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EDUAmag zrcadlo</title>
+<link rel="icon" href="data:,">
+<script src="ruka.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #161616; overflow: hidden; }
+  body { --panel: 310px; }
+  body.bez-panelu { --panel: 0px; }
+  #stage { position: fixed; inset: 0 var(--panel) 0 0; display: flex; align-items: center; justify-content: center; }
+  /* obálka = vrstvy přes sebe: stříbro, odraz z kamery, kresba */
+  #obalka {
+    position: relative; isolation: isolate;
+    width: min(calc(100vw - var(--panel) - 48px), calc((100vh - 48px) * 5198 / 3744));
+    aspect-ratio: 5198 / 3744;
+  }
+  #obalka > svg, #obalka > video { position: absolute; top: 0; height: 100%; display: block; }
+  #pozadi, #art { left: 0; width: 100%; }
+  #art { cursor: default; }
+  #art .doodle { cursor: grab; }
+  #art .doodle:active { cursor: grabbing; }
+  /* odraz jen na titulní straně (pravá polovina desek), zrcadlově otočený a ztlumený do stříbra */
+  #odraz { left: 50%; width: 50%; object-fit: cover; transform: scaleX(-1); mix-blend-mode: multiply; display: none; }
+  body.kamera #odraz { display: block; }
+
+  #panel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: var(--panel); overflow-y: auto; padding: 14px 16px 28px;
+    background: #1e1e1e; border-left: 1px solid #2d2d2d; color: #d8d8d8;
+    font: 12px/1.4 -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  }
+  body.bez-panelu #panel { display: none; }
+  #panel h3, #panel summary { margin: 18px 0 8px; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #7d7d7d; }
+  #panel summary { cursor: pointer; }
+  #panel button, #panel select, #panel input[type=number], #panel textarea, #ukaz {
+    font: inherit; color: inherit; background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 5px; padding: 4px 8px;
+  }
+  #panel button, #ukaz { cursor: pointer; white-space: nowrap; }
+  #panel button:hover, #ukaz:hover { background: #343434; }
+  #panel button.hlavni { display: block; width: 100%; margin-top: 8px; padding: 7px 8px; background: #003de5; border-color: #003de5; color: #fff; font-weight: 600; }
+  #panel button.hlavni:hover { background: #1f55ff; }
+  body.kamera #kamera { background: #003de5; border-color: #003de5; color: #fff; }
+  .hlava, .rada { display: flex; align-items: center; gap: 6px; }
+  .hlava { justify-content: space-between; margin-bottom: 12px; }
+  .hlava strong { color: #fff; }
+  .rada > input { flex: 1; min-width: 0; }
+  .rada.dole { margin-top: 18px; flex-wrap: wrap; }
+  .rada.dole button { flex: 1 1 auto; }
+  .prvek { margin-bottom: 10px; }
+  .vradku { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  .vradku > span { white-space: nowrap; }
+  .vradku select { flex: 0 1 180px; min-width: 0; }
+  .popis { display: flex; align-items: baseline; gap: 6px; margin-bottom: 3px; white-space: nowrap; }
+  .hodnota { margin-left: auto; color: #858585; font-variant-numeric: tabular-nums; }
+  input[type=range] { display: block; width: 100%; accent-color: #4a78ff; }
+  input[type=checkbox] { accent-color: #4a78ff; }
+  #hlasky { display: block; width: 100%; margin-bottom: 6px; resize: vertical; white-space: pre; }
+  .pozn { color: #7d7d7d; margin-top: 4px; }
+  #ukaz { position: fixed; top: 12px; right: 12px; display: none; color: #d8d8d8; font: 12px/1.4 -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; }
+  body.bez-panelu #ukaz { display: block; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="obalka">
+    <svg id="pozadi" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5198 3744"></svg>
+    <video id="odraz" autoplay playsinline muted></video>
+    <svg id="art" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5198 3744"></svg>
+  </div>
+</div>
+<aside id="panel">
+  <div class="hlava"><strong>EDUAmag – zrcadlo</strong><button id="skryt" type="button" title="Skrýt panel (H)">Skrýt</button></div>
+  <div class="rada">
+    <label for="cislo">Varianta</label>
+    <input id="cislo" type="number" min="0" step="1">
+    <button id="nova" type="button" title="Nová varianta (mezerník)">Nová</button>
+  </div>
+  <button id="kamera" class="hlavni" type="button">Zapnout kameru</button>
+
+  <h3>Odraz</h3>
+  <div class="prvek">
+    <div class="popis"><span>Síla odrazu</span><span class="hodnota" id="silaOut"></span></div>
+    <input id="sila" type="range" min="10" max="100" step="5" value="60">
+  </div>
+  <label class="vradku"><span>Ukázat místo pro obličej</span><input id="zona" type="checkbox"></label>
+
+  <h3>Hláška a doodles</h3>
+  <div class="vradku"><span>Hláška</span><select id="hlaska"></select></div>
+  <div class="vradku"><span>Na hlavu</span><select id="hlavaSel"></select></div>
+  <div class="vradku"><span>Na oči</span><select id="ociSel"></select></div>
+  <div class="vradku"><span>Pod nos</span><select id="ustaSel"></select></div>
+  <div class="vradku"><span>Šipka k obličeji</span><select id="sipkaSel"><option value="">náhodně</option><option value="ano">ano</option><option value="ne">ne</option></select></div>
+  <div class="prvek">
+    <div class="popis"><span>Drobné doodles kolem</span><span class="hodnota" id="drobneOut"></span></div>
+    <input id="drobne" type="range" min="0" max="6" step="1">
+  </div>
+  <details>
+    <summary>Seznam hlášek</summary>
+    <textarea id="hlasky" rows="14" spellcheck="false" title="Jedna hláška na řádek. Nový řádek v hlášce udělá znak /"></textarea>
+    <button id="hlaskyReset" type="button">Původní hlášky</button>
+    <p class="pozn">Jedna hláška na řádek, lomítko / zalomí řádek v hlášce.</p>
+  </details>
+
+  <h3>Vzhled</h3>
+  <div class="vradku"><span>Barva doodles</span><select id="barva">
+    <option value="#ffffff">bílá</option><option value="#2e3192">modrá EDUA</option><option value="#141414">černá</option><option value="#6b6b6b">šedá</option>
+  </select></div>
+  <div class="prvek">
+    <div class="popis"><span>Tloušťka čáry</span><span class="hodnota" id="caraOut"></span></div>
+    <input id="cara" type="range" min="3" max="14" step="1" value="6">
+  </div>
+  <div class="vradku"><span>It's all about</span><select id="itsSel"><option value="uvnitr">uvnitř U</option><option value="skryt">skrýt</option></select></div>
+  <p class="pozn">Doodles jdou chytit myší a posunout.</p>
+
+  <div class="rada dole">
+    <button id="expSvg" type="button" title="Obálka jako SVG (S)">SVG</button>
+    <button id="expPng" type="button" title="Obálka jako PNG, se zapnutou kamerou i s odrazem (P)">PNG</button>
+    <button id="expDoodles" type="button" title="Všechny doodles a hlášky jako vektory v jednom SVG">Všechny doodles</button>
+  </div>
+</aside>
+<button id="ukaz" type="button" title="Zobrazit panel (H)">Nastavení</button>
+
+<script>
+// Rozevřené desky jako v generátoru: 5198 × 3744 px @ 300 dpi = 440 × 317 mm vč. spadávky 10 mm.
+// Titulní strana je pravá polovina; logo leží na stejném místě jako v generátoru.
+const W = 5198, H = 3744, BLEED = 118, DPI = 300, NS = 'http://www.w3.org/2000/svg';
+const FRONT = W / 2, TRIM_L = FRONT + 140, TRIM_R = W - BLEED - 80, TRIM_T = BLEED + 80, TRIM_B = H - BLEED - 80;
+const LOGO_URL = '../prvky/LOGO.png';
+const FONT_URLS = { 300: '../fonts/Moniak-Light.otf', 400: '../fonts/Moniak-Regular.otf', 500: '../fonts/Moniak-Medium.otf' };
+
+// Hlášky ke čtenáři, který se v obálce vidí. Témata podle obsahu ročenky 2026.
+const DEFAULT_HLASKY = [
+  'Vypadáte vzdělaně!',
+  'Vypadáte sečtěle!',
+  'Vypadáte skvěle!',
+  'Takhle vypadá lídr.',
+  'Nevím. / A je to OK.',
+  'Ano, a…',
+  'Tenhle obličej / si zapamatujte!',
+  'Amygdala / v klidu',
+  'Soustředěný pohled!',
+  'Notifikace / vypnuté?',
+  'Pozitivní / mindset ✓',
+  'Profilovka / hotová!',
+  '#OpenToLearning',
+  'Mluvte! / Klidně s chybou.',
+  'Hello! Hola! / Ahoj!',
+  'Zero cringe.',
+  'Lepší než / před 25 lety!',
+  'Šťastný život ✓ / Špičkový výkon ✓',
+  'Vypadáte / odpočatě!',
+  'Nesložte se / z toho!',
+];
+// které doodles k hlášce sedí (podle slov v ní)
+const TEMATA = [
+  [/vzděl/, ['cepice', 'bryle']], [/sečt|čte|knih/, ['bryle', 'kniha']], [/lídr/, ['koruna', 'kompas']],
+  [/25/, ['party', 'jiskry']], [/zapamat|mozek|amygdal|pamě/, ['mozek']], [/soustřed|notifik/, ['zvonek', 'bryle']],
+  [/mindset|radost|skvěl|odpočat|úsměv/, ['svatozar', 'srdce', 'jiskry']], [/mluv|hello|hola|ahoj|jazyk/, ['bublina']],
+  [/slož|origami/, ['lodka']], [/výkon|šťast/, ['vavrin', 'fajfka']], [/profilov|open/, ['jiskry', 'fajfka']],
+  [/ano, a/, ['zarovka']], [/nevím/, ['myslenka']], [/cringe|slay/, ['bryle', 'jiskry']],
+];
+const SEATS = { hlava: ['cepice', 'koruna', 'svatozar', 'party'], oci: ['bryle'], usta: ['knirek'] };
+const EDGE = Object.keys(Ruka.DRAW).filter(k => !['hlava', 'oci', 'usta'].includes(Ruka.DRAW[k].seat));
+
+// ─── stav ───
+const P = { hlaska: null, hlava: null, oci: null, usta: null, sipka: null, drobne: null, barva: '#ffffff', cara: 6, its: 'uvnitr' };
+let HLASKY = DEFAULT_HLASKY;
+let seed, R, logoHref = null, U = null, face = null;
+const moved = {}; // ruční posuny doodles (do další varianty)
+const $ = id => document.getElementById(id);
+const art = $('art'), bg = $('pozadi'), video = $('odraz');
+
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rnd = (a, b) => R() * (b - a) + a;
+const pick = arr => arr[Math.floor(R() * arr.length)];
+const chance = p => R() < p;
+const shuffle = arr => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+function el(tag, attrs, parent) { const n = document.createElementNS(NS, tag); for (const k in attrs) if (attrs[k] !== undefined) n.setAttribute(k, attrs[k]); if (parent) parent.appendChild(n); return n; }
+const f1 = v => Math.round(v * 10) / 10;
+
+// ─── stříbro (procedurálně; místo něj jde dát skutečný sken jako zrcadlo/stribro.jpg) ───
+function drawBackground(photo) {
+  bg.innerHTML = '';
+  const defs = el('defs', {}, bg);
+  if (photo) { el('image', { href: photo, x: 0, y: 0, width: W, height: H, preserveAspectRatio: 'xMidYMid slice' }, bg); return; }
+  const lg = el('linearGradient', { id: 'stribro', x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+  [[0, '#a9a9a9'], [0.12, '#d6d6d6'], [0.45, '#efefef'], [0.7, '#e2e2e2'], [0.92, '#c4c4c4'], [1, '#9c9c9c']].forEach(([o, c]) => el('stop', { offset: o, 'stop-color': c }, lg));
+  el('rect', { x: 0, y: 0, width: W, height: H, fill: 'url(#stribro)' }, bg);
+  // měkké odlesky a stíny jako na fólii
+  const blur = el('filter', { id: 'mlha', x: '-50%', y: '-50%', width: '200%', height: '200%' }, defs);
+  el('feGaussianBlur', { stdDeviation: 260 }, blur);
+  [[0.18, 0.62, 0.22, 0.2, '#ffffff', 0.9], [0.55, 0.3, 0.25, 0.14, '#ffffff', 0.6], [0.4, 0.85, 0.3, 0.12, '#ffffff', 0.7], [0.75, 0.55, 0.2, 0.25, '#8f8f8f', 0.35], [0.05, 0.25, 0.15, 0.3, '#8f8f8f', 0.3]]
+    .forEach(([x, y, rx, ry, c, o]) => el('ellipse', { cx: W * x, cy: H * y, rx: W * rx, ry: H * ry, fill: c, opacity: o, filter: 'url(#mlha)' }, bg));
+  // jemné vodorovné broušení
+  const br = el('filter', { id: 'brus', x: 0, y: 0, width: W, height: H, filterUnits: 'userSpaceOnUse' }, defs);
+  el('feTurbulence', { type: 'fractalNoise', baseFrequency: '0.0012 0.25', numOctaves: 2, seed: 7 }, br);
+  el('feColorMatrix', { type: 'saturate', values: 0 }, br);
+  el('rect', { x: 0, y: 0, width: W, height: H, filter: 'url(#brus)', opacity: 0.07 }, bg);
+}
+
+// ─── pevná část: logo, podtitul, U ───
+function drawFixed(g, defs) {
+  // logo: bílé LOGO.png ztlumené do světle šedé s jemným stínem, jako ražba ve stříbře
+  if (logoHref) {
+    const fl = el('filter', { id: 'razba', x: '-5%', y: '-5%', width: '110%', height: '120%' }, defs);
+    el('feColorMatrix', { in: 'SourceGraphic', type: 'matrix', values: '0 0 0 0 0.86  0 0 0 0 0.86  0 0 0 0 0.86  0 0 0 1 0', result: 'svetla' }, fl);
+    el('feOffset', { in: 'SourceAlpha', dx: 5, dy: 8, result: 'pos' }, fl);
+    el('feGaussianBlur', { in: 'pos', stdDeviation: 4, result: 'roz' }, fl);
+    el('feColorMatrix', { in: 'roz', type: 'matrix', values: '0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.28 0', result: 'stin' }, fl);
+    const m = el('feMerge', {}, fl); el('feMergeNode', { in: 'stin' }, m); el('feMergeNode', { in: 'svetla' }, m);
+    el('image', { href: logoHref, x: FRONT, y: BLEED, width: 2480, height: 595, filter: 'url(#razba)' }, g);
+  }
+  el('text', { x: 3894, y: 852, 'text-anchor': 'middle', 'font-family': 'Moniak', 'font-weight': 400, 'font-size': 64, fill: '#1d1d1b' }, g).textContent = 'Novinky v celoživotním vzdělávání';
+  el('text', { x: 3894, y: 950, 'text-anchor': 'middle', 'font-family': 'Moniak', 'font-weight': 500, 'font-size': 52, 'letter-spacing': 6, fill: '#1d1d1b' }, g).textContent = 'ROČENKA 2026';
+  // velké U s přechodem jako v návrhu
+  const ug = el('linearGradient', { id: 'uGrad', x1: 1, y1: 0, x2: 0, y2: 1 }, defs);
+  [[0, '#0d0d0d'], [0.45, '#4a4a4a'], [1, '#b9b9b9']].forEach(([o, c]) => el('stop', { offset: o, 'stop-color': c }, ug));
+  // rozměry písmene odměřené z návrhu: tahy 325, dole půlkruh
+  const x1 = 3067, x2 = 4704, top = 1079, bottom = 3197, stem = 325;
+  const ro = (x2 - x1) / 2, ri = ro - stem, cx = (x1 + x2) / 2, cy = bottom - ro;
+  el('path', { fill: 'url(#uGrad)', d: `M${x1} ${top}V${cy}A${ro} ${ro} 0 0 0 ${x2} ${cy}V${top}H${x2 - stem}V${cy}A${ri} ${ri} 0 0 1 ${x1 + stem} ${cy}V${top}Z` }, g);
+  // místo pro obličej = vnitřek písmene
+  const in1 = x1 + stem, in2 = x2 - stem, inBot = bottom - stem;
+  U = { x1, x2, y1: top, y2: bottom, cx, stem, in1, in2, inBot };
+  face = { cx, cy: top + (inBot - top) * 0.55, rx: (in2 - in1) * 0.4 };
+  face.ry = face.rx * 1.32;
+  if (P.its === 'uvnitr') {
+    ['It’s', 'all', 'about'].forEach((t, i) => el('text', { x: cx, y: 1689 + i * 221, 'text-anchor': 'middle', 'font-family': 'Moniak', 'font-weight': 400, 'font-size': 175, fill: '#8d8d8d' }, g).textContent = t);
+  }
+}
+
+// ─── doodles ───
+const boxes = [];
+const free = (b, pad = 50) => b.x1 >= TRIM_L && b.x2 <= TRIM_R && b.y1 >= TRIM_T && b.y2 <= TRIM_B &&
+  !boxes.some(o => b.x1 < o.x2 + pad && o.x1 < b.x2 + pad && b.y1 < o.y2 + pad && o.y1 < b.y2 + pad);
+function doodle(g, key, strokes, x, y, k, rot) {
+  const off = moved[key] || [0, 0];
+  const grp = el('g', { class: 'doodle', 'data-k': key, transform: `translate(${f1(x + off[0])} ${f1(y + off[1])}) rotate(${f1(rot)}) scale(${k.toFixed(4)})` }, g);
+  el('path', { d: Ruka.draw(strokes, R), fill: 'none', stroke: P.barva, 'stroke-width': f1(P.cara / k), 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, grp);
+  return grp;
+}
+// kresba z knihovny, vystředěná na (x, y) a zmenšená na šířku w
+function place(g, key, id, x, y, w, rot = rnd(-6, 6)) {
+  const d = Ruka.DRAW[id], st = d.strokes(), bb = Ruka.bbox(st), k = w / bb.w;
+  const cx = (bb.x1 + bb.x2) / 2, cy = (bb.y1 + bb.y2) / 2;
+  const box = { x1: x - bb.w * k / 2, x2: x + bb.w * k / 2, y1: y - bb.h * k / 2, y2: y + bb.h * k / 2 };
+  doodle(g, key, Ruka.move(st, -cx, -cy), x, y, k, rot);
+  return box;
+}
+function wrap(text) {
+  if (text.includes('/')) return text.split('/').map(s => s.trim()).join('\n');
+  if (text.length <= 12) return text;
+  const words = text.split(' '), lines = [''];
+  words.forEach(w => { if ((lines[lines.length - 1] + ' ' + w).trim().length > 12 && lines[lines.length - 1]) lines.push(w); else lines[lines.length - 1] = (lines[lines.length - 1] + ' ' + w).trim(); });
+  return lines.join('\n');
+}
+function drawDoodles(g) {
+  boxes.length = 0;
+  boxes.push({ x1: FRONT, x2: W, y1: 0, y2: 1000 }); // logo a podtitul
+  const text = P.hlaska !== null && HLASKY[P.hlaska] ? HLASKY[P.hlaska] : pick(HLASKY);
+  const low = text.toLocaleLowerCase('cs');
+  const tags = [...new Set(TEMATA.filter(([re]) => re.test(low)).flatMap(([, ids]) => ids))];
+
+  // doplňky na obličej: z ručního výběru, jinak podle hlášky, jinak náhodně
+  const seatPick = (seat, pr) => {
+    const v = P[seat];
+    if (v === 'nic') return null;
+    if (v) return v;
+    const fit = tags.find(t => SEATS[seat].includes(t));
+    if (fit) return fit;
+    return chance(pr) ? pick(SEATS[seat]) : null;
+  };
+  let hlava = seatPick('hlava', 0.5), oci = seatPick('oci', 0.45), usta = seatPick('usta', 0.4);
+  if (!hlava && !oci && !usta && !P.hlava && !P.oci && !P.usta) usta = 'knirek';
+  const fw = face.rx * 2;
+  if (hlava) {
+    const d = Ruka.DRAW[hlava], st = d.strokes(), bb = Ruka.bbox(st), w = fw * (hlava === 'party' ? 0.55 : hlava === 'svatozar' ? 0.95 : 0.85), k = w / bb.w;
+    const yBottom = face.cy - face.ry * (hlava === 'svatozar' ? 1.0 : 0.72);
+    const y = yBottom - bb.h * k / 2;
+    boxes.push(place(g, 'hlava', hlava, face.cx + rnd(-30, 30), y, w, rnd(-8, 8)));
+  }
+  if (oci) boxes.push(place(g, 'oci', oci, face.cx, face.cy - face.ry * 0.12, fw * 1.05, rnd(-4, 4)));
+  if (usta) boxes.push(place(g, 'usta', usta, face.cx, face.cy + face.ry * 0.4, fw * 0.62, rnd(-5, 5)));
+  // obličej sám je taky obsazený
+  boxes.push({ x1: face.cx - face.rx, x2: face.cx + face.rx, y1: face.cy - face.ry, y2: face.cy + face.ry });
+
+  // hláška vlevo nebo vpravo od vnitřku U, případně pod písmenem
+  const lt = Ruka.letter(wrap(text), R, { cap: 78, align: 'left' });
+  const slots = shuffle([
+    () => ({ x: U.in1 + 70 - lt.w, y: rnd(U.y1 + 250, U.inBot - lt.h - 100) }),
+    () => ({ x: U.in2 - 70, y: rnd(U.y1 + 250, U.inBot - lt.h - 100) }),
+    () => ({ x: U.cx - lt.w / 2 + rnd(-200, 200), y: U.y2 + 70 }),
+  ]);
+  let cap = null;
+  for (const s of slots) {
+    for (let t = 0; t < 6 && !cap; t++) {
+      const p = s(), b = { x1: p.x, x2: p.x + lt.w, y1: p.y, y2: p.y + lt.h };
+      if (free(b, 30)) cap = { ...p, b };
+    }
+    if (cap) break;
+  }
+  if (!cap) { const p = { x: Math.max(TRIM_L, U.in1 + 70 - lt.w), y: U.y1 + 300 }; cap = { ...p, b: { x1: p.x, x2: p.x + lt.w, y1: p.y, y2: p.y + lt.h } }; }
+  doodle(g, 'hlaska', lt.strokes, cap.x, cap.y, 1, 0);
+  boxes.push(cap.b);
+
+  // šipka od hlášky k obličeji, občas se smyčkou
+  if (P.sipka === 'ano' || (P.sipka !== 'ne' && chance(0.7))) {
+    const b = cap.b, mid = [(b.x1 + b.x2) / 2, (b.y1 + b.y2) / 2];
+    const ang = Math.atan2(face.cy - mid[1], face.cx - mid[0]);
+    const S = [mid[0] + Math.cos(ang) * (b.x2 - b.x1) * 0.55, mid[1] + Math.sin(ang) * (b.y2 - b.y1) * 0.6 + 40];
+    const E = [face.cx - Math.cos(ang) * face.rx * 1.08, face.cy - Math.sin(ang) * face.ry * 0.6];
+    const M = [(S[0] + E[0]) / 2 + rnd(-60, 60), (S[1] + E[1]) / 2 + rnd(60, 140)];
+    const loop = chance(0.5);
+    let st = Ruka.join(Ruka.bez(S, [S[0] + (M[0] - S[0]) * 0.3, S[1] + 120], [M[0] - 80, M[1] + 40], M, 10));
+    if (loop) st = Ruka.join(st, Ruka.arc(M[0], M[1] - 46, 46, 46, 90, 450, 20));
+    st = Ruka.join(st, Ruka.bez(M, [M[0] + 80, M[1] - 40], [E[0] - (E[0] - M[0]) * 0.3, E[1] + 60], E, 10));
+    const pa = st[st.length - 4], dir = Math.atan2(E[1] - pa[1], E[0] - pa[0]);
+    const head = [[E[0] - Math.cos(dir - 0.5) * 60, E[1] - Math.sin(dir - 0.5) * 60], E, [E[0] - Math.cos(dir + 0.5) * 60, E[1] - Math.sin(dir + 0.5) * 60]];
+    doodle(g, 'sipka', [st, head], 0, 0, 1, 0);
+  }
+
+  // drobné doodles kolem písmene: nejdřív ty, které k hlášce sedí, pak náhodné
+  const n = P.drobne !== null ? P.drobne : Math.floor(rnd(2, 5));
+  const pool = [...tags.filter(t => EDGE.includes(t)), ...shuffle(EDGE)].filter((v, i, a) => a.indexOf(v) === i).filter(id => id !== 'fajfka' || tags.includes('fajfka'));
+  const spots = shuffle([
+    [U.x1 - 120, U.y1 + 260], [U.x1 - 60, U.y2 - 380], [U.x2 + 80, U.y1 + 300], [U.x2 + 40, U.y2 - 420],
+    [U.cx - 600, U.y2 + 140], [U.cx + 600, U.y2 + 140], [U.x1 + 120, U.y1 - 40], [U.x2 - 120, U.y1 - 40],
+    [U.x1 + U.stem / 2, (U.y1 + U.y2) / 2], [U.x2 - U.stem / 2, (U.y1 + U.y2) / 2],
+  ]);
+  let placed = 0;
+  for (const id of pool) {
+    if (placed >= n) break;
+    const w = 300 * (Ruka.DRAW[id].size / 250) * rnd(0.85, 1.15);
+    for (const [sx, sy] of spots) {
+      const bb = Ruka.bbox(Ruka.DRAW[id].strokes()), h = bb.h * w / bb.w;
+      const b = { x1: sx - w / 2, x2: sx + w / 2, y1: sy - h / 2, y2: sy + h / 2 };
+      if (!free(b)) continue;
+      boxes.push(place(g, 'd' + placed, id, sx, sy, w, rnd(-14, 14)));
+      placed++;
+      break;
+    }
+  }
+}
+
+function drawZone(g) {
+  if (!$('zona').checked) return;
+  el('ellipse', { cx: face.cx, cy: face.cy, rx: face.rx, ry: face.ry, fill: 'none', stroke: '#ff2bd6', 'stroke-width': 8, 'stroke-dasharray': '40 28', class: 'zona' }, g);
+}
+
+// ─── generování ───
+let hashTimer;
+function generate(newSeed) {
+  if (newSeed !== seed) for (const k in moved) delete moved[k];
+  seed = newSeed;
+  R = mulberry32(seed);
+  clearTimeout(hashTimer);
+  hashTimer = setTimeout(() => history.replaceState(null, '', '#' + seed), 150);
+  art.innerHTML = '';
+  const defs = el('defs', {}, art);
+  const g = el('g', { id: 'obalka-kresba' }, art);
+  drawFixed(g, defs);
+  const gd = el('g', { id: 'doodles' }, art);
+  drawDoodles(gd);
+  drawZone(art);
+  sync();
+}
+function sync() {
+  if (document.activeElement !== $('cislo')) $('cislo').value = seed;
+  // výběry v panelu ukazují aktuální nastavení
+  $('hlaska').value = P.hlaska === null ? '' : String(P.hlaska);
+  [['hlavaSel', 'hlava'], ['ociSel', 'oci'], ['ustaSel', 'usta'], ['sipkaSel', 'sipka']].forEach(([id, k]) => { $(id).value = P[k] || ''; });
+  $('drobne').value = P.drobne === null ? 3 : P.drobne;
+  $('silaOut').textContent = $('sila').value + ' %';
+  $('caraOut').textContent = P.cara;
+  $('drobneOut').textContent = P.drobne === null ? 'náhodně' : P.drobne;
+  video.style.opacity = $('sila').value / 100;
+  video.style.filter = `grayscale(1) contrast(1.15) brightness(1.3) blur(${(1.5 - $('sila').value / 100).toFixed(2)}px)`;
+}
+
+// ─── posouvání doodles myší ───
+let drag = null;
+const toSvg = e => { const p = art.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; return p.matrixTransform(art.getScreenCTM().inverse()); };
+art.addEventListener('pointerdown', e => {
+  const grp = e.target.closest('.doodle');
+  if (!grp) return;
+  const k = grp.dataset.k, p = toSvg(e);
+  drag = { grp, k, x: p.x, y: p.y, base: moved[k] ? [...moved[k]] : [0, 0], t: grp.getAttribute('transform') };
+  art.setPointerCapture(e.pointerId);
+});
+art.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const p = toSvg(e), dx = p.x - drag.x, dy = p.y - drag.y;
+  moved[drag.k] = [drag.base[0] + dx, drag.base[1] + dy];
+  drag.grp.setAttribute('transform', `translate(${f1(dx)} ${f1(dy)}) ` + drag.t);
+});
+art.addEventListener('pointerup', () => { drag = null; });
+
+// ─── kamera ───
+async function toggleCamera() {
+  if (document.body.classList.contains('kamera')) {
+    (video.srcObject?.getTracks() || []).forEach(t => t.stop());
+    video.srcObject = null;
+    document.body.classList.remove('kamera');
+    $('kamera').textContent = 'Zapnout kameru';
+    return;
+  }
+  try {
+    video.srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 } }, audio: false });
+    document.body.classList.add('kamera');
+    $('kamera').textContent = 'Vypnout kameru';
+  } catch (err) {
+    $('kamera').textContent = 'Kamera nejde zapnout';
+    console.warn(err);
+  }
+}
+
+// ─── export ───
+let fontCss = '';
+function snapshot(forPng) {
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('xmlns', NS);
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  if (forPng) { svg.setAttribute('width', W); svg.setAttribute('height', H); }
+  else { svg.setAttribute('width', (W / DPI * 25.4).toFixed(2) + 'mm'); svg.setAttribute('height', (H / DPI * 25.4).toFixed(2) + 'mm'); }
+  svg.innerHTML = `<style>${fontCss}</style>`;
+  return svg;
+}
+const serialize = svg => new XMLSerializer().serializeToString(svg);
+function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
+function coverSvg(forPng, withBg = true, withArt = true) {
+  const svg = snapshot(forPng);
+  if (withBg) [...bg.childNodes].forEach(n => svg.appendChild(n.cloneNode(true)));
+  if (withArt) [...art.childNodes].forEach(n => { if (!(n.classList && n.classList.contains('zona'))) svg.appendChild(n.cloneNode(true)); });
+  return svg;
+}
+function exportSvg() { download(new Blob([serialize(coverSvg(false))], { type: 'image/svg+xml' }), `eduamag-zrcadlo-${seed}.svg`); }
+const loadImg = src => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+async function exportPng() {
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const c = cv.getContext('2d');
+  const svgUrl = svg => URL.createObjectURL(new Blob([serialize(svg)], { type: 'image/svg+xml' }));
+  const bgUrl = svgUrl(coverSvg(true, true, false)), artUrl = svgUrl(coverSvg(true, false, true));
+  c.drawImage(await loadImg(bgUrl), 0, 0, W, H);
+  if (document.body.classList.contains('kamera') && video.videoWidth) {
+    // stejný odraz jako v náhledu: titulní strana, zrcadlově, šedě, násobením do stříbra
+    const vw = video.videoWidth, vh = video.videoHeight, tw = W / 2, th = H, s = Math.max(tw / vw, th / vh);
+    c.save();
+    c.globalAlpha = $('sila').value / 100;
+    c.globalCompositeOperation = 'multiply';
+    c.filter = `grayscale(1) contrast(1.15) brightness(1.3) blur(${(4 - $('sila').value / 40).toFixed(1)}px)`;
+    c.beginPath(); c.rect(FRONT, 0, tw, th); c.clip();
+    c.translate(FRONT + tw, 0); c.scale(-1, 1);
+    c.drawImage(video, (tw - vw * s) / 2, (th - vh * s) / 2, vw * s, vh * s);
+    c.restore();
+  }
+  c.drawImage(await loadImg(artUrl), 0, 0, W, H);
+  URL.revokeObjectURL(bgUrl); URL.revokeObjectURL(artUrl);
+  cv.toBlob(b => download(b, `eduamag-zrcadlo-${seed}.png`), 'image/png');
+}
+// všechny kresby a hlášky vedle sebe jako jeden vektorový arch (černá čára, v Illustratoru přebarvit)
+function exportDoodles() {
+  const Rs = mulberry32(1);
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('xmlns', NS);
+  const items = [
+    ...Object.entries(Ruka.DRAW).map(([id, d]) => ({ id, label: d.label, strokes: d.strokes() })),
+    ...HLASKY.map((t, i) => ({ id: 'hlaska-' + (i + 1), label: t, strokes: Ruka.letter(wrap(t), Rs, { cap: 78 }).strokes })),
+  ];
+  const cellW = 700, cellH = 520, cols = 5;
+  items.forEach((it, i) => {
+    const bb = Ruka.bbox(it.strokes), k = Math.min(1, 560 / bb.w, 380 / bb.h);
+    const x = (i % cols) * cellW + cellW / 2, y = Math.floor(i / cols) * cellH + cellH / 2;
+    const grp = el('g', { id: it.id, transform: `translate(${f1(x - (bb.x1 + bb.w / 2) * k)} ${f1(y - (bb.y1 + bb.h / 2) * k)}) scale(${k.toFixed(4)})` }, svg);
+    el('path', { d: Ruka.draw(it.strokes, Rs), fill: 'none', stroke: '#000', 'stroke-width': f1(6 / k), 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, grp);
+  });
+  const rows = Math.ceil(items.length / cols);
+  svg.setAttribute('viewBox', `0 0 ${cols * cellW} ${rows * cellH}`);
+  download(new Blob([serialize(svg)], { type: 'image/svg+xml' }), 'eduamag-doodles.svg');
+}
+
+// ─── panel ───
+function fillSelects() {
+  const sel = $('hlaska'), keep = sel.value;
+  sel.innerHTML = '<option value="">náhodně</option>' + HLASKY.map((t, i) => `<option value="${i}">${t.replace(/</g, '&lt;')}</option>`).join('');
+  sel.value = keep;
+  const seatSel = (id, seat) => { $(id).innerHTML = '<option value="">náhodně</option><option value="nic">nic</option>' + SEATS[seat].map(k => `<option value="${k}">${Ruka.DRAW[k].label}</option>`).join(''); };
+  seatSel('hlavaSel', 'hlava'); seatSel('ociSel', 'oci'); seatSel('ustaSel', 'usta');
+}
+function setHlasky(text) {
+  const lines = text === null ? DEFAULT_HLASKY : text.split('\n').map(s => s.trim()).filter(Boolean);
+  HLASKY = lines.length ? lines : DEFAULT_HLASKY;
+  try { HLASKY.join('\n') === DEFAULT_HLASKY.join('\n') ? localStorage.removeItem('zrcadlo-hlasky') : localStorage.setItem('zrcadlo-hlasky', HLASKY.join('\n')); } catch (e) { /* bez úložiště */ }
+  if (P.hlaska !== null && P.hlaska >= HLASKY.length) P.hlaska = null;
+  fillSelects();
+}
+function bindPanel() {
+  const on = (id, ev, fn) => $(id).addEventListener(ev, fn);
+  on('nova', 'click', () => generate(Math.floor(Math.random() * 1e6)));
+  on('cislo', 'change', e => { const v = parseInt(e.target.value, 10); if (Number.isFinite(v)) generate(v); });
+  on('kamera', 'click', toggleCamera);
+  on('sila', 'input', sync);
+  on('zona', 'change', () => generate(seed));
+  on('hlaska', 'change', e => { P.hlaska = e.target.value === '' ? null : +e.target.value; generate(seed); e.target.blur(); });
+  [['hlavaSel', 'hlava'], ['ociSel', 'oci'], ['ustaSel', 'usta'], ['sipkaSel', 'sipka'], ['itsSel', 'its']].forEach(([id, k]) =>
+    on(id, 'change', e => { P[k] = e.target.value || (k === 'its' ? 'uvnitr' : null); generate(seed); e.target.blur(); }));
+  on('drobne', 'input', e => { P.drobne = +e.target.value; generate(seed); });
+  on('barva', 'change', e => { P.barva = e.target.value; generate(seed); e.target.blur(); });
+  on('cara', 'input', e => { P.cara = +e.target.value; generate(seed); });
+  on('hlasky', 'input', e => { setHlasky(e.target.value); generate(seed); });
+  on('hlaskyReset', 'click', () => { setHlasky(null); $('hlasky').value = HLASKY.join('\n'); generate(seed); });
+  on('expSvg', 'click', exportSvg);
+  on('expPng', 'click', exportPng);
+  on('expDoodles', 'click', exportDoodles);
+  const toggle = () => document.body.classList.toggle('bez-panelu');
+  on('skryt', 'click', toggle); on('ukaz', 'click', toggle);
+  window.addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey || (e.target.matches && e.target.matches('textarea, input[type=number], select'))) return;
+    if (e.code === 'Space') { e.preventDefault(); generate(Math.floor(Math.random() * 1e6)); }
+    else if (e.key === 's' || e.key === 'S') exportSvg();
+    else if (e.key === 'p' || e.key === 'P') exportPng();
+    else if (e.key === 'h' || e.key === 'H') toggle();
+  });
+  $('panel').addEventListener('click', e => { const b = e.target.closest('button'); if (b && e.detail > 0) b.blur(); });
+}
+
+// ─── start ───
+const toDataUrl = blob => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+(async () => {
+  // písmo Moniak do stránky i do exportu (PNG ho jinak nevidí)
+  const parts = await Promise.all(Object.entries(FONT_URLS).map(async ([w, url]) => {
+    const data = await toDataUrl(await (await fetch(url)).blob());
+    const face = new FontFace('Moniak', `url(${data})`, { weight: w });
+    document.fonts.add(await face.load());
+    return `@font-face{font-family:Moniak;font-weight:${w};src:url(${data});}`;
+  }));
+  fontCss = parts.join('');
+  try { logoHref = await toDataUrl(await (await fetch(LOGO_URL)).blob()); } catch (e) { logoHref = null; }
+  let photo = null;
+  try { const r = await fetch('stribro.jpg'); if (r.ok) photo = await toDataUrl(await r.blob()); } catch (e) { /* bez fotky stříbra */ }
+  drawBackground(photo);
+  try { const saved = localStorage.getItem('zrcadlo-hlasky'); if (saved !== null) setHlasky(saved); else fillSelects(); } catch (e) { fillSelects(); }
+  $('hlasky').value = HLASKY.join('\n');
+  bindPanel();
+  const h = parseInt(location.hash.slice(1), 10);
+  generate(Number.isFinite(h) ? h : Math.floor(Math.random() * 1e6));
+})();
+</script>
+</body>
+</html>
