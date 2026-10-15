@@ -21,8 +21,11 @@
   #obalka > svg { position: absolute; top: 0; height: 100%; display: block; }
   #pozadi, #art { left: 0; width: 100%; }
   #art { cursor: default; }
+  #art { touch-action: none; }
   #art .doodle { cursor: grab; }
   #art .doodle:active { cursor: grabbing; }
+  #art .uchop[data-h=scale] { cursor: nwse-resize; }
+  #art .uchop[data-h=rot] { cursor: crosshair; }
   /* odraz jen na titulní straně (pravá polovina desek), zrcadlově otočený a ztlumený do stříbra */
   #odrazBox { position: absolute; top: 0; left: 50%; width: 50%; height: 100%; overflow: hidden; mix-blend-mode: multiply; display: none; }
   #odraz { display: block; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
@@ -128,7 +131,8 @@
   </div>
   <div class="vradku"><span>Rozvržení</span><select id="layoutSel"><option value="novy">tónované U, podtitul dole</option><option value="puvodni">tmavé U (první návrh)</option></select></div>
   <div class="vradku"><span>It's all about</span><select id="itsSel"><option value="uvnitr">ukázat</option><option value="skryt">skrýt</option></select></div>
-  <p class="pozn">Doodles jdou chytit myší a posunout.</p>
+  <p class="pozn">Klikněte na doodle: tažením ho posunete, rohem zvětšíte, kolečkem nahoře otočíte (se Shiftem po 15°). Delete ho smaže, Esc zruší výběr.</p>
+  <button id="vratit" type="button" style="margin-top:6px">Vrátit doodles na místo</button>
 
   <div class="rada dole">
     <button id="expSvg" type="button" title="Obálka jako SVG (S)">SVG</button>
@@ -279,11 +283,27 @@ function drawFixedPuvodni(g, defs) {
 const boxes = [];
 const free = (b, pad = 50) => b.x1 >= TRIM_L && b.x2 <= TRIM_R && b.y1 >= TRIM_T && b.y2 <= TRIM_B &&
   !boxes.some(o => b.x1 < o.x2 + pad && o.x1 < b.x2 + pad && b.y1 < o.y2 + pad && o.y1 < b.y2 + pad);
+// Každý doodle si pamatuje výchozí polohu (data-x/y/r/s); ruční posun, otočení, zvětšení a smazání
+// jsou v moved[klíč] a drží až do další varianty. Kresba je vystředěná, takže se otáčí kolem středu.
 function doodle(g, key, strokes, x, y, k, rot) {
-  const off = moved[key] || [0, 0];
-  const grp = el('g', { class: 'doodle', 'data-k': key, transform: `translate(${f1(x + off[0])} ${f1(y + off[1])}) rotate(${f1(rot)}) scale(${k.toFixed(4)})` }, g);
-  el('path', { d: Ruka.draw(strokes, R), fill: 'none', stroke: P.barva, 'stroke-width': f1(P.cara / k), 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, grp);
+  const o = moved[key] || {};
+  const grp = el('g', { class: 'doodle', 'data-k': key, 'data-x': f1(x), 'data-y': f1(y), 'data-r': f1(rot), 'data-s': k.toFixed(4) }, o.hidden ? null : g);
+  // cesta se počítá i u smazaného doodlu, aby se ostatní nezměnily
+  el('path', { d: Ruka.draw(strokes, R), fill: 'none', stroke: P.barva, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, grp);
+  if (!o.hidden) {
+    // neviditelná plocha pod kresbou, ať jdou chytit i tenké čáry
+    const bb = grp.firstChild.getBBox(), pad = 30 / k;
+    grp.insertBefore(el('rect', { class: 'hit', x: f1(bb.x - pad), y: f1(bb.y - pad), width: f1(bb.width + 2 * pad), height: f1(bb.height + 2 * pad), fill: '#000', 'fill-opacity': 0 }), grp.firstChild);
+  }
+  applyT(grp);
   return grp;
+}
+const doodleEl = key => art.querySelector(`.doodle[data-k="${key}"]`);
+const pathOf = grp => grp.querySelector('path');
+function applyT(grp) {
+  const o = moved[grp.dataset.k] || {}, s = +grp.dataset.s * (o.s || 1);
+  grp.setAttribute('transform', `translate(${f1(+grp.dataset.x + (o.dx || 0))} ${f1(+grp.dataset.y + (o.dy || 0))}) rotate(${f1(+grp.dataset.r + (o.r || 0))}) scale(${s.toFixed(4)})`);
+  pathOf(grp).setAttribute('stroke-width', f1(P.cara / s)); // čára zůstává stejně silná i po zvětšení
 }
 // kresba z knihovny, vystředěná na (x, y) a zmenšená na šířku w
 function place(g, key, id, x, y, w, rot = rnd(-6, 6)) {
@@ -370,7 +390,8 @@ function drawDoodles(g) {
     st = Ruka.join(st, Ruka.bez(M, [M[0] + 80, M[1] - 40], [E[0] - (E[0] - M[0]) * 0.3, E[1] + 60], E, 10));
     const pa = st[st.length - 4], dir = Math.atan2(E[1] - pa[1], E[0] - pa[0]);
     const head = [[E[0] - Math.cos(dir - 0.5) * 60, E[1] - Math.sin(dir - 0.5) * 60], E, [E[0] - Math.cos(dir + 0.5) * 60, E[1] - Math.sin(dir + 0.5) * 60]];
-    doodle(g, 'sipka', [st, head], 0, 0, 1, 0);
+    const ab = Ruka.bbox([st, head]), ac = [(ab.x1 + ab.x2) / 2, (ab.y1 + ab.y2) / 2];
+    doodle(g, 'sipka', Ruka.move([st, head], -ac[0], -ac[1]), ac[0], ac[1], 1, 0);
   }
 
   // drobné doodles kolem písmene: nejdřív ty, které k hlášce sedí, pak náhodné
@@ -407,7 +428,7 @@ function drawZone(g) {
 // ─── generování ───
 let hashTimer;
 function generate(newSeed) {
-  if (newSeed !== seed) for (const k in moved) delete moved[k];
+  if (newSeed !== seed) { for (const k in moved) delete moved[k]; sel = null; }
   seed = newSeed;
   R = mulberry32(seed);
   clearTimeout(hashTimer);
@@ -419,6 +440,7 @@ function generate(newSeed) {
   const gd = el('g', { id: 'doodles' }, art);
   drawDoodles(gd);
   drawZone(art);
+  drawSel();
   sync();
 }
 function sync() {
@@ -436,21 +458,44 @@ function sync() {
   video.style.filter = `grayscale(1) contrast(1.15) brightness(1.3) blur(${(1.5 - $('sila').value / 100).toFixed(2)}px)`;
 }
 
-// ─── posouvání doodles myší ───
-let drag = null;
+// ─── úpravy doodles: výběr, posun, zvětšení, otočení ───
+let drag = null, sel = null;
 const toSvg = e => { const p = art.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; return p.matrixTransform(art.getScreenCTM().inverse()); };
+// rámeček kolem vybraného doodlu: rohy zvětšují, kolečko nahoře otáčí
+function drawSel() {
+  const old = art.querySelector('#vyber');
+  if (old) old.remove();
+  const grp = sel && doodleEl(sel);
+  if (!grp) { sel = null; return; }
+  const o = moved[sel] || {}, s = +grp.dataset.s * (o.s || 1), bb = pathOf(grp).getBBox();
+  const u = 1 / art.getScreenCTM().a; // jednotek obálky na pixel obrazovky
+  const cx = +grp.dataset.x + (o.dx || 0), cy = +grp.dataset.y + (o.dy || 0), rot = +grp.dataset.r + (o.r || 0);
+  const w = bb.width * s + 24 * u, h = bb.height * s + 24 * u, ox = (bb.x + bb.width / 2) * s, oy = (bb.y + bb.height / 2) * s;
+  const v = el('g', { id: 'vyber', transform: `translate(${f1(cx)} ${f1(cy)}) rotate(${f1(rot)})` }, art);
+  el('rect', { x: f1(ox - w / 2), y: f1(oy - h / 2), width: f1(w), height: f1(h), fill: 'none', stroke: '#ff2bd6', 'stroke-width': f1(1.5 * u), 'stroke-dasharray': `${f1(6 * u)} ${f1(4 * u)}`, 'pointer-events': 'none' }, v);
+  const hs = 14 * u;
+  [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([sx, sy]) => el('rect', { class: 'uchop', 'data-h': 'scale', x: f1(ox + sx * w / 2 - hs / 2), y: f1(oy + sy * h / 2 - hs / 2), width: f1(hs), height: f1(hs), fill: '#fff', stroke: '#ff2bd6', 'stroke-width': f1(1.5 * u) }, v));
+  el('line', { x1: f1(ox), y1: f1(oy - h / 2), x2: f1(ox), y2: f1(oy - h / 2 - 32 * u), stroke: '#ff2bd6', 'stroke-width': f1(1.5 * u), 'pointer-events': 'none' }, v);
+  el('circle', { class: 'uchop', 'data-h': 'rot', cx: f1(ox), cy: f1(oy - h / 2 - 32 * u), r: f1(9 * u), fill: '#fff', stroke: '#ff2bd6', 'stroke-width': f1(1.5 * u) }, v);
+}
 art.addEventListener('pointerdown', e => {
-  const grp = e.target.closest('.doodle');
-  if (!grp) return;
-  const k = grp.dataset.k, p = toSvg(e);
-  drag = { grp, k, x: p.x, y: p.y, base: moved[k] ? [...moved[k]] : [0, 0], t: grp.getAttribute('transform') };
+  const h = e.target.closest('.uchop'), grp = e.target.closest('.doodle');
+  if (!h && !grp) { if (sel) { sel = null; drawSel(); } return; }
+  if (grp) sel = grp.dataset.k;
+  const g2 = doodleEl(sel), o = moved[sel] = moved[sel] || {};
+  drag = { mode: h ? h.dataset.h : 'move', p: toSvg(e), c: [+g2.dataset.x + (o.dx || 0), +g2.dataset.y + (o.dy || 0)], o0: { dx: o.dx || 0, dy: o.dy || 0, r: o.r || 0, s: o.s || 1 } };
   art.setPointerCapture(e.pointerId);
+  drawSel();
+  e.preventDefault();
 });
 art.addEventListener('pointermove', e => {
-  if (!drag) return;
-  const p = toSvg(e), dx = p.x - drag.x, dy = p.y - drag.y;
-  moved[drag.k] = [drag.base[0] + dx, drag.base[1] + dy];
-  drag.grp.setAttribute('transform', `translate(${f1(dx)} ${f1(dy)}) ` + drag.t);
+  if (!drag || !sel) return;
+  const p = toSvg(e), o = moved[sel], d = drag, ang = q => Math.atan2(q.y - d.c[1], q.x - d.c[0]);
+  if (d.mode === 'move') { o.dx = d.o0.dx + p.x - d.p.x; o.dy = d.o0.dy + p.y - d.p.y; }
+  else if (d.mode === 'scale') o.s = Math.max(0.15, Math.min(8, d.o0.s * Math.hypot(p.x - d.c[0], p.y - d.c[1]) / Math.max(1, Math.hypot(d.p.x - d.c[0], d.p.y - d.c[1]))));
+  else { o.r = d.o0.r + (ang(p) - ang(d.p)) * 180 / Math.PI; if (e.shiftKey) o.r = Math.round(o.r / 15) * 15; }
+  applyT(doodleEl(sel));
+  drawSel();
 });
 art.addEventListener('pointerup', () => { drag = null; });
 
@@ -489,7 +534,8 @@ function download(blob, name) { const a = document.createElement('a'); a.href = 
 function coverSvg(forPng, withBg = true, withArt = true) {
   const svg = snapshot(forPng);
   if (withBg) [...bg.childNodes].forEach(n => svg.appendChild(n.cloneNode(true)));
-  if (withArt) [...art.childNodes].forEach(n => { if (!(n.classList && n.classList.contains('zona'))) svg.appendChild(n.cloneNode(true)); });
+  if (withArt) [...art.childNodes].forEach(n => { if (!(n.classList && n.classList.contains('zona')) && n.id !== 'vyber') svg.appendChild(n.cloneNode(true)); });
+  svg.querySelectorAll('.hit').forEach(n => n.remove());
   return svg;
 }
 function exportSvg() { download(new Blob([serialize(coverSvg(false))], { type: 'image/svg+xml' }), `eduamag-zrcadlo-${seed}.svg`); }
@@ -570,12 +616,15 @@ function bindPanel() {
   on('hlasky', 'input', e => { setHlasky(e.target.value); generate(seed); });
   on('hlaskyReset', 'click', () => { setHlasky(null); $('hlasky').value = HLASKY.join('\n'); generate(seed); });
   on('expSvg', 'click', exportSvg);
+  on('vratit', 'click', () => { for (const k in moved) delete moved[k]; sel = null; generate(seed); });
   on('expPng', 'click', exportPng);
   on('expDoodles', 'click', exportDoodles);
   const toggle = () => document.body.classList.toggle('bez-panelu');
   on('skryt', 'click', toggle); on('ukaz', 'click', toggle);
   window.addEventListener('keydown', e => {
     if (e.metaKey || e.ctrlKey || e.altKey || (e.target.matches && e.target.matches('textarea, input[type=number], select'))) return;
+    if (sel && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); (moved[sel] = moved[sel] || {}).hidden = true; sel = null; generate(seed); return; }
+    if (e.key === 'Escape') { sel = null; drawSel(); return; }
     if (e.code === 'Space') { e.preventDefault(); generate(Math.floor(Math.random() * 1e6)); }
     else if (e.key === 's' || e.key === 'S') exportSvg();
     else if (e.key === 'p' || e.key === 'P') exportPng();
