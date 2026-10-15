@@ -69,7 +69,7 @@ const Ruka = (() => {
   // všechny čáry kresby jako jedna cesta (v Illustratoru jeden objekt)
   const draw = (strokes, R, amp = 1.3, step = 14, over = 4) => strokes.map(st => pathD(shake(st, R, amp, step, over))).join('');
 
-  // ── ručně psané verzálky ──
+  // ── ručně psané písmo ──
   // jednotky: výška verzálek 14, účaří y = 14; [šířka, čáry]
   const G = {
     A: [10, [[[0, 14], [5, 0], [10, 14]], [[2.2, 9], [7.8, 9]]]],
@@ -113,39 +113,133 @@ const Ruka = (() => {
     '✓': [10, [[[0, 8], [3.5, 13], [10, 1]]]],
     "'": [0, [[[0, 0], [0, 3]]]],
     '→': [12, [[[0, 7], [12, 7]], [[8, 3], [12, 7], [8, 11]]]],
+    3: [8.8, [join(arc(4.3, 3.6, 4, 3.6, -160, 90), arc(4.3, 10.5, 4.5, 3.5, -90, 160))]],
+    4: [9, [[[7, 14], [7, 0], [0, 9.5], [9, 9.5]]]],
+    6: [8.7, [join(bez([7.5, 0.3], [3, 1], [0.2, 5], [0.3, 9.8], 8), arc(4.5, 9.8, 4.2, 4.2, 180, 530))]],
+    7: [9, [[[0, 0], [9, 0], [3, 14]]]],
+    8: [9, [join(arc(4.5, 3.5, 3.6, 3.5, 90, 450), arc(4.5, 10.5, 4.5, 3.5, -90, 270))]],
+    9: [8.6, [join(arc(4.3, 4.4, 4.3, 4.4, 20, 375), [[8.6, 4.8], [7.6, 14]])]],
+    '+': [8, [[[4, 4], [4, 12]], [[0, 8], [8, 8]]]],
+    '/': [6, [[[6, 0], [0, 14]]]],
+    '(': [3, [arc(6, 7, 6, 8, -125, -235)]],
+    ')': [3, [arc(-3, 7, 6, 8, -55, 55)]],
+    '“': [3, [[[1, 0], [0, 3]], [[3, 0], [2, 3]]]],
+    '„': [3, [[[1, 12.5], [0, 15.5]], [[3, 12.5], [2, 15.5]]]],
+    '"': [3, [[[1, 0], [0, 3]], [[3, 0], [2, 3]]]],
+    '’': [0, [[[0.5, 0], [0, 3]]]],
+
+    // ── ručně psané minusky ──
+    // výška x 9 (y 5–14), dotahy nahoru k y = 0, dolů k y ≈ 18.5
+    a: [7.5, [arc(3.5, 9.5, 3.5, 4.5, -20, -345), [[7, 5], [7, 13], [7.8, 14]]]],
+    b: [7.2, [[[0, 0], [0, 14]], arc(3.6, 9.5, 3.6, 4.5, -165, 165)]],
+    c: [7, [arc(3.8, 9.5, 3.8, 4.5, -35, -325)]],
+    d: [7.5, [arc(3.5, 9.5, 3.5, 4.5, -20, -345), [[7, 0], [7, 13], [7.8, 14]]]],
+    e: [7.2, [join([[0.3, 9.5], [7.2, 9.5]], arc(3.6, 9.5, 3.6, 4.5, 0, -315))]],
+    f: [5.5, [join(arc(4.2, 2.5, 2.2, 2.2, -30, -180), [[2, 2.5], [2, 14]]), [[0, 6], [5, 6]]]],
+    g: [7.5, [arc(3.5, 8.8, 3.5, 3.8, -20, -345), join([[7, 5], [7, 16]], arc(3.5, 16, 3.5, 2.6, 0, 165))]],
+    h: [7, [[[0, 0], [0, 14]], join(arc(3.5, 8.5, 3.5, 3.5, -180, 0), [[7, 8.5], [7, 14]])]],
+    i: [0, [[[0, 5], [0, 14]], dot(0, 2)]],
+    'ı': [0, [[[0, 5], [0, 14]]]],
+    j: [2.5, [join([[2.5, 5], [2.5, 16.5]], arc(0.5, 16.5, 2, 2, 0, 150)), dot(2.5, 2)]],
+    k: [6.5, [[[0, 0], [0, 14]], [[6, 5], [0, 10.5]], [[2.2, 8.8], [6.5, 14]]]],
+    l: [2, [join([[0, 0], [0, 12.5]], arc(1.5, 12.5, 1.5, 1.5, 180, 90))]],
+    m: [10.8, [[[0, 5], [0, 14]], join(arc(2.7, 8, 2.7, 3, -180, 0), [[5.4, 8], [5.4, 14]]), join(arc(8.1, 8, 2.7, 3, -180, 0), [[10.8, 8], [10.8, 14]])]],
+    n: [7, [[[0, 5], [0, 14]], join(arc(3.5, 8.5, 3.5, 3.5, -180, 0), [[7, 8.5], [7, 14]])]],
+    o: [7.6, [arc(3.8, 9.5, 3.8, 4.5, -90, 275)]],
+    p: [7.2, [[[0, 5], [0, 18.5]], arc(3.6, 9.5, 3.6, 4.5, -165, 165)]],
+    q: [7.5, [arc(3.5, 9.5, 3.5, 4.5, -20, -345), [[7, 5], [7, 18.5], [8.5, 17.5]]]],
+    r: [5, [[[0, 5], [0, 14]], arc(3, 8.5, 3, 3, -180, -55)]],
+    s: [6.4, [join(arc(3.2, 7.1, 3, 2.1, -15, -270), arc(3.2, 11.6, 3.2, 2.4, -90, 165))]],
+    t: [5, [join([[2, 1.5], [2, 12.5]], arc(3.5, 12.5, 1.5, 1.5, 180, 90)), [[0, 5.5], [5, 5.5]]]],
+    u: [7, [join([[0, 5], [0, 10.5]], arc(3.5, 10.5, 3.5, 3.5, 180, 0), [[7, 10.5], [7, 5]]), [[7, 5], [7, 13], [7.6, 14]]]],
+    v: [7, [[[0, 5], [3.5, 14], [7, 5]]]],
+    w: [10, [[[0, 5], [2.5, 14], [5, 7.5], [7.5, 14], [10, 5]]]],
+    x: [7, [[[0, 5], [7, 14]], [[7, 5], [0, 14]]]],
+    y: [7, [[[0, 5], [3.5, 14]], [[7, 5], [3.5, 14], [1.6, 18.5]]]],
+    z: [7, [[[0, 5], [7, 5], [0, 14], [7, 14]]]],
   };
   const ACC = { 'Á': ['A', 'a'], 'É': ['E', 'a'], 'Í': ['I', 'a'], 'Ó': ['O', 'a'], 'Ú': ['U', 'a'], 'Ý': ['Y', 'a'], 'Ů': ['U', 'o'],
-    'Č': ['C', 'v'], 'Ď': ['D', 'v'], 'Ě': ['E', 'v'], 'Ň': ['N', 'v'], 'Ř': ['R', 'v'], 'Š': ['S', 'v'], 'Ť': ['T', 'v'], 'Ž': ['Z', 'v'] };
+    'Č': ['C', 'v'], 'Ď': ['D', 'v'], 'Ě': ['E', 'v'], 'Ň': ['N', 'v'], 'Ř': ['R', 'v'], 'Š': ['S', 'v'], 'Ť': ['T', 'v'], 'Ž': ['Z', 'v'],
+    'á': ['a', 'a'], 'é': ['e', 'a'], 'í': ['ı', 'a'], 'ó': ['o', 'a'], 'ú': ['u', 'a'], 'ý': ['y', 'a'], 'ů': ['u', 'o'],
+    'č': ['c', 'v'], 'ě': ['e', 'v'], 'ň': ['n', 'v'], 'ř': ['r', 'v'], 'š': ['s', 'v'], 'ž': ['z', 'v'], 'ď': ['d', "'"], 'ť': ['t', "'"] };
   function glyph(ch) {
     if (G[ch]) return G[ch];
     const a = ACC[ch];
     if (!a) return null;
     const [w, st] = G[a[0]], cx = w / 2;
-    const mark = a[1] === 'a' ? [[cx - 1, -2], [cx + 1.6, -4.6]] : a[1] === 'v' ? [[cx - 2, -4.4], [cx, -2], [cx + 2, -4.4]] : arc(cx, -3.4, 1.5, 1.5, 0, 360, 10);
+    // u minusek sedí znaménko nad výškou x, u verzálek nad verzálkou; ď a ť mají háček jako čárku vpravo
+    const top = a[0] === a[0].toUpperCase() ? 0 : 5.6;
+    if (a[1] === "'") return a[0] === 'd' ? [w + 1.6, [...st, [[w + 1.6, -0.2], [w + 0.9, 2.6]]]] : [w, [...st, [[4.1, 0.3], [3.5, 2.8]]]];
+    const mark = a[1] === 'a' ? [[cx - 1, top - 2], [cx + 1.6, top - 4.6]] : a[1] === 'v' ? [[cx - 2, top - 4.4], [cx, top - 2], [cx + 2, top - 4.4]] : arc(cx, top - 3.4, 1.5, 1.5, 0, 360, 10);
     return [w, [...st, mark]];
   }
-  // Text → čáry. Řádky odděluje \n. Vrací čáry v jednotkách výstupu, začátek vlevo nahoře.
-  function letter(text, R, { cap = 60, align = 'left', gap = 1.55, wobble = 1 } = {}) {
-    const s = cap / 14, out = [], lines = String(text).toLocaleUpperCase('cs').split('\n');
-    const widths = lines.map(line => [...line].reduce((w, ch) => w + (ch === ' ' ? 6 : ((glyph(ch) || [6])[0] + 2.6)), 0) - 2.6);
-    const maxW = Math.max(...widths);
+
+  // Text → čáry, jako by ho někdo rychle napsal fixou. Řádky odděluje \n.
+  // Text zůstává tak, jak je napsaný (velká i malá písmena). Každý řádek má jiné odsazení,
+  // sklon a velikost, účaří se lehce prohne, písmena poskakují a mezery mezi nimi nejsou stejné.
+  // live = 0 dá klidné písmo (čísla na čepici, N na kompasu). upper = true převede na verzálky.
+  // Vrací čáry v jednotkách výstupu, začátek vlevo nahoře (podle skutečného obrysu).
+  function letter(text, R, { cap = 60, gap = 1.6, live = 1, upper = false, extras = true } = {}) {
+    const s = cap / 14, rnd = (a, b) => a + R() * (b - a), sym = a => (R() * 2 - 1) * a;
+    let lines = String(text).split('\n');
+    if (upper) lines = lines.map(l => l.toLocaleUpperCase('cs'));
+    const slant = live ? rnd(0.04, 0.2) : 0;          // sklon celé hlášky doprava
+    // občas jedno slovo zdůrazní verzálkami (jen když je hláška psaná malými)
+    let shout = null;
+    if (live && extras && !upper && R() < 0.3) {
+      const words = lines.flatMap((l, li) => l.split(' ').map((w, wi) => ({ li, wi, w }))).filter(o => /[a-záéíóúůýčďěňřšťž]{3,}/.test(o.w));
+      if (words.length) shout = words[Math.floor(R() * words.length)];
+    }
+    const out = [], marks = [];
+    let y = 0, prevIndent = 0;
     lines.forEach((line, li) => {
-      let x = align === 'center' ? (maxW - widths[li]) / 2 : align === 'right' ? maxW - widths[li] : 0;
-      const y = li * 14 * gap;
-      [...line].forEach(ch => {
-        if (ch === ' ') { x += 6; return; }
+      const words = line.split(' ');
+      if (shout && shout.li === li) words[shout.wi] = words[shout.wi].toLocaleUpperCase('cs');
+      line = words.join(' ');
+      const ls = live ? rnd(0.86, 1.16) : 1;           // velikost řádku
+      const lrot = live ? sym(5) : 0;                // sklon řádku
+      const bow = live ? sym(3) : 0;                 // prohnutí účaří
+      // odsazení: řádky nezačínají pod sebou, ale „plavou“
+      const indent = li === 0 || !live ? 0 : prevIndent * 0.3 + sym(12) + (R() < 0.45 ? rnd(6, 22) : 0);
+      prevIndent = indent;
+      const chars = [...line];
+      const total = chars.reduce((w, ch) => w + (ch === ' ' ? 6 : ((glyph(ch) || [6])[0] + 2.6)), 0);
+      const lr = rad(lrot), lc = Math.cos(lr), lsn = Math.sin(lr);
+      const put = (px, py) => {                        // bod řádku → výstup (skon, prohnutí, otočení řádku)
+        const t = total ? px / total : 0, by = py - Math.sin(Math.PI * t) * bow;
+        const sx = (px - (by - 14) * slant) * ls, sy = (by - 14) * ls;
+        return [(indent + sx * lc - sy * lsn) * s, (y + 14 + sx * lsn + sy * lc) * s];
+      };
+      let x = 0;
+      const wordSpans = [];
+      let wStart = null;
+      chars.forEach((ch, ci) => {
+        if (ch === ' ') { if (wStart !== null) wordSpans.push([wStart, x]); wStart = null; x += live ? rnd(4.5, 8) : 6; return; }
         const g = glyph(ch);
         if (!g) { x += 6; return; }
-        const [w, st] = g, rot = (R() * 2 - 1) * 4 * wobble, k = 1 + (R() * 2 - 1) * 0.05 * wobble, dy = (R() * 2 - 1) * 0.5 * wobble;
-        const c = Math.cos(rad(rot)), sn = Math.sin(rad(rot)), cx = w / 2, cy = 7;
+        if (wStart === null) wStart = x;
+        const [w, st] = g, rot = sym(7 * live), k = 1 + sym(0.1 * live), dy = sym(1.2 * live), cx = w / 2, cy = 9.5;
+        const c = Math.cos(rad(rot)), sn = Math.sin(rad(rot));
         st.forEach(p => out.push(p.map(([px, py]) => {
           const ux = (px - cx) * k, uy = (py - cy) * k;
-          return [(x + cx + ux * c - uy * sn) * s, (y + cy + dy + ux * sn + uy * c) * s];
+          return put(x + cx + ux * c - uy * sn, cy + dy + ux * sn + uy * c);
         })));
-        x += w + 2.6;
+        x += w + (live ? rnd(1.6, 3.4) : 2.6);
+        if (ci === chars.length - 1) wordSpans.push([wStart, x - 2.6]);
       });
+      // podtržení: vlnovka nebo dvojitá čára pod celým řádkem či jedním slovem
+      if (live && extras && R() < 0.22 && !marks.length) {
+        const [a, b] = R() < 0.5 && wordSpans.length > 1 ? wordSpans[Math.floor(R() * wordSpans.length)] : [0, x - 2.6];
+        const yy = 17.5 + rnd(0, 1.5), wave = R() < 0.5, n = Math.max(3, Math.round((b - a) / 5));
+        const line1 = [];
+        for (let i = 0; i <= n; i++) line1.push(put(a - 1 + (b - a + 3) * i / n, yy + (wave ? (i % 2 ? 1.1 : -1.1) : sym(0.4))));
+        marks.push(line1);
+        if (!wave && R() < 0.5) marks.push([put(a + 1, yy + 2.6), put(b - 2, yy + 2.2 + sym(0.6))]);
+      }
+      y += 14 * gap * (live ? rnd(0.95, 1.1) : 1) * ls;
     });
-    return { strokes: out, w: maxW * s, h: (14 + (lines.length - 1) * 14 * gap) * s };
+    const all = out.concat(marks), bb = bbox(all);
+    return { strokes: move(all, -bb.x1, -bb.y1), w: bb.w, h: bb.h };
   }
 
   // ── kresby ──
@@ -190,7 +284,7 @@ const Ruka = (() => {
     svatozar: { label: 'svatozář', seat: 'hlava', size: 250, strokes: () => [
       arc(0, 0, 120, 26, 200, 614, 36), [[-62, -42], [-70, -62]], [[0, -48], [0, -70]], [[62, -42], [70, -62]]] },
     party: { label: 'párty klobouček 25', seat: 'hlava', size: 170, strokes: () => {
-      const n = letter('25', () => 0.5, { cap: 34, wobble: 0 });
+      const n = letter('25', () => 0.5, { cap: 34, live: 0 });
       return [[[-62, 70], [0, -86], [62, 70]], arc(0, 70, 62, 14, 0, 180),
         [[0, -86], [0, -104]], [[0, -86], [16, -100]], [[0, -86], [-16, -100]], [[0, -86], [18, -86]], [[0, -86], [-18, -86]],
         ...move(n.strokes, -n.w / 2 - 4, 16)];
@@ -229,7 +323,7 @@ const Ruka = (() => {
       return [page, mirror(page), [[0, -34], [0, 54]], ...lines, ...lines.map(mirror)];
     } },
     kompas: { label: 'kompas (hodnoty)', seat: 'okraj', size: 190, strokes: () => {
-      const n = letter('N', () => 0.5, { cap: 26, wobble: 0 });
+      const n = letter('N', () => 0.5, { cap: 26, live: 0 });
       return [arc(0, 0, 76, 76, -90, 270), arc(0, 0, 64, 64, -80, 280), [[0, -50], [13, 0], [0, 50], [-13, 0], [0, -50]], [[-13, 0], [13, 0]], ...move(n.strokes, -n.w / 2, -116)];
     } },
     fajfka: { label: 'fajfka', seat: 'okraj', size: 130, strokes: () => [[[-60, 0], [-20, 44], [62, -50]]] },

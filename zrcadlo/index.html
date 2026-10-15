@@ -315,9 +315,9 @@ function place(g, key, id, x, y, w, rot = rnd(-6, 6)) {
 }
 function wrap(text) {
   if (text.includes('/')) return text.split('/').map(s => s.trim()).join('\n');
-  if (text.length <= 12) return text;
+  if (text.length <= 13) return text;
   const words = text.split(' '), lines = [''];
-  words.forEach(w => { if ((lines[lines.length - 1] + ' ' + w).trim().length > 12 && lines[lines.length - 1]) lines.push(w); else lines[lines.length - 1] = (lines[lines.length - 1] + ' ' + w).trim(); });
+  words.forEach(w => { if ((lines[lines.length - 1] + ' ' + w).trim().length > 13 && lines[lines.length - 1]) lines.push(w); else lines[lines.length - 1] = (lines[lines.length - 1] + ' ' + w).trim(); });
   return lines.join('\n');
 }
 function drawDoodles(g) {
@@ -352,27 +352,37 @@ function drawDoodles(g) {
   boxes.push({ x1: face.cx - face.rx, x2: face.cx + face.rx, y1: face.cy - face.ry, y2: face.cy + face.ry });
 
   // hláška vlevo nebo vpravo od vnitřku U, případně pod písmenem
-  const lt = Ruka.letter(wrap(text), R, { cap: 78, align: 'left' });
-  const capRot = (chance(0.5) ? 1 : -1) * rnd(6, 17);
+  const lt = Ruka.letter(wrap(text), R, { cap: 92 });
+  const capRot = (chance(0.5) ? 1 : -1) * rnd(4, 15);
   const cr = Math.abs(capRot) * Math.PI / 180;
-  const rw = lt.w * Math.cos(cr) + lt.h * Math.sin(cr), rh = lt.w * Math.sin(cr) + lt.h * Math.cos(cr);
-  const rbox = p => { const cx = p.x + lt.w / 2, cy = p.y + lt.h / 2; return { x1: cx - rw / 2, x2: cx + rw / 2, y1: cy - rh / 2, y2: cy + rh / 2 }; };
-  const slots = shuffle([
-    () => ({ x: U.in1 + 70 - lt.w, y: rnd(U.y1 + 250, U.inBot - lt.h - 100) }),
-    () => ({ x: U.in2 - 70, y: rnd(U.y1 + 250, U.inBot - lt.h - 100) }),
-    () => ({ x: U.cx - lt.w / 2 + rnd(-200, 200), y: U.y2 + 70 }),
-  ]);
+  // když se hláška nikam nevejde, zkusí se menší (ručně psané řádky jsou různě odsazené, tedy širší)
   let cap = null;
-  for (const s of slots) {
-    for (let t = 0; t < 6 && !cap; t++) {
-      const p = s(), b = rbox(p);
-      if (free(b, 30)) cap = { ...p, b };
+  for (const k of [1, 0.88, 0.77, 0.68]) {
+    const w = lt.w * k, h = lt.h * k;
+    const rw = w * Math.cos(cr) + h * Math.sin(cr), rh = w * Math.sin(cr) + h * Math.cos(cr);
+    const rbox = p => { const cx = p.x + w / 2, cy = p.y + h / 2; return { x1: cx - rw / 2, x2: cx + rw / 2, y1: cy - rh / 2, y2: cy + rh / 2 }; };
+    // posun tak, aby otočený obrys držel u okraje vnitřku U
+    const ox = (rw - w) / 2;
+    const slots = shuffle([
+      () => ({ x: U.in1 + 70 - w - ox, y: rnd(U.y1 + 250, U.inBot - h - 100) }),
+      () => ({ x: U.in2 - 70 + ox, y: rnd(U.y1 + 250, U.inBot - h - 100) }),
+      () => ({ x: U.cx - w / 2 + rnd(-200, 200), y: U.y2 + 70 }),
+    ]);
+    for (const sl of slots) {
+      for (let t = 0; t < 6 && !cap; t++) {
+        const p = sl(), b = rbox(p);
+        if (free(b, 30)) cap = { ...p, b, k, w, h };
+      }
+      if (cap) break;
     }
     if (cap) break;
   }
-  if (!cap) { const p = { x: Math.max(TRIM_L, U.in1 + 70 - lt.w), y: U.y1 + 300 }; cap = { ...p, b: rbox(p) }; }
+  if (!cap) {
+    const k = 0.68, w = lt.w * k, h = lt.h * k, p = { x: Math.max(TRIM_L, U.in1 + 70 - w), y: U.y1 + 300 };
+    cap = { ...p, k, w, h, b: { x1: p.x, x2: p.x + w, y1: p.y, y2: p.y + h } };
+  }
   // otáčí se kolem středu textu
-  doodle(g, 'hlaska', Ruka.move(lt.strokes, -lt.w / 2, -lt.h / 2), cap.x + lt.w / 2, cap.y + lt.h / 2, 1, capRot);
+  doodle(g, 'hlaska', Ruka.move(lt.strokes, -lt.w / 2, -lt.h / 2), cap.x + cap.w / 2, cap.y + cap.h / 2, cap.k, capRot);
   boxes.push(cap.b);
 
   // šipka od hlášky k obličeji, občas se smyčkou
@@ -570,7 +580,7 @@ function exportDoodles() {
   svg.setAttribute('xmlns', NS);
   const items = [
     ...Object.entries(Ruka.DRAW).map(([id, d]) => ({ id, label: d.label, strokes: d.strokes() })),
-    ...HLASKY.map((t, i) => ({ id: 'hlaska-' + (i + 1), label: t, strokes: Ruka.letter(wrap(t), Rs, { cap: 78 }).strokes })),
+    ...HLASKY.map((t, i) => ({ id: 'hlaska-' + (i + 1), label: t, strokes: Ruka.letter(wrap(t), Rs, { cap: 92 }).strokes })),
   ];
   const cellW = 700, cellH = 520, cols = 5;
   items.forEach((it, i) => {
