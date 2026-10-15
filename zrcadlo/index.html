@@ -18,14 +18,15 @@
     width: min(calc(100vw - var(--panel) - 48px), calc((100vh - 48px) * 5198 / 3744));
     aspect-ratio: 5198 / 3744;
   }
-  #obalka > svg, #obalka > video { position: absolute; top: 0; height: 100%; display: block; }
+  #obalka > svg { position: absolute; top: 0; height: 100%; display: block; }
   #pozadi, #art { left: 0; width: 100%; }
   #art { cursor: default; }
   #art .doodle { cursor: grab; }
   #art .doodle:active { cursor: grabbing; }
   /* odraz jen na titulní straně (pravá polovina desek), zrcadlově otočený a ztlumený do stříbra */
-  #odraz { left: 50%; width: 50%; object-fit: cover; transform: scaleX(-1); mix-blend-mode: multiply; display: none; }
-  body.kamera #odraz { display: block; }
+  #odrazBox { position: absolute; top: 0; left: 50%; width: 50%; height: 100%; overflow: hidden; mix-blend-mode: multiply; display: none; }
+  #odraz { display: block; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  body.kamera #odrazBox { display: block; }
 
   #panel {
     position: fixed; top: 0; right: 0; bottom: 0; width: var(--panel); overflow-y: auto; padding: 14px 16px 28px;
@@ -76,7 +77,7 @@
 <div id="stage">
   <div id="obalka">
     <svg id="pozadi" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5198 3744"></svg>
-    <video id="odraz" autoplay playsinline muted></video>
+    <div id="odrazBox"><video id="odraz" autoplay playsinline muted></video></div>
     <svg id="art" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5198 3744"></svg>
   </div>
 </div>
@@ -93,6 +94,10 @@
   <div class="prvek">
     <div class="popis"><span>Síla odrazu</span><span class="hodnota" id="silaOut"></span></div>
     <input id="sila" type="range" min="10" max="100" step="5" value="60">
+  </div>
+  <div class="prvek">
+    <div class="popis"><span>Velikost odrazu</span><span class="hodnota" id="zoomOut"></span></div>
+    <input id="zoom" type="range" min="40" max="160" step="5" value="100" title="Kamera zvětšuje obličej, když se přiblížíte; skutečné zrcadlo ne. Tady ho nastavíte na velikost, jakou bude mít v obálce.">
   </div>
   <label class="vradku"><span>Ukázat místo pro obličej</span><input id="zona" type="checkbox"></label>
 
@@ -115,13 +120,14 @@
 
   <h3>Vzhled</h3>
   <div class="vradku"><span>Barva doodles</span><select id="barva">
-    <option value="#ffffff">bílá</option><option value="#2e3192">modrá EDUA</option><option value="#141414">černá</option><option value="#6b6b6b">šedá</option>
+    <option value="#003de5">modrá jako podtitul</option><option value="#2e3192">modrá z vnitřku</option><option value="#ffffff">bílá</option><option value="#141414">černá</option><option value="#6b6b6b">šedá</option>
   </select></div>
   <div class="prvek">
     <div class="popis"><span>Tloušťka čáry</span><span class="hodnota" id="caraOut"></span></div>
     <input id="cara" type="range" min="3" max="14" step="1" value="6">
   </div>
-  <div class="vradku"><span>It's all about</span><select id="itsSel"><option value="uvnitr">uvnitř U</option><option value="skryt">skrýt</option></select></div>
+  <div class="vradku"><span>Rozvržení</span><select id="layoutSel"><option value="novy">tónované U, podtitul dole</option><option value="puvodni">tmavé U (první návrh)</option></select></div>
+  <div class="vradku"><span>It's all about</span><select id="itsSel"><option value="uvnitr">ukázat</option><option value="skryt">skrýt</option></select></div>
   <p class="pozn">Doodles jdou chytit myší a posunout.</p>
 
   <div class="rada dole">
@@ -175,7 +181,7 @@ const SEATS = { hlava: ['cepice', 'koruna', 'svatozar', 'party'], oci: ['bryle']
 const EDGE = Object.keys(Ruka.DRAW).filter(k => !['hlava', 'oci', 'usta'].includes(Ruka.DRAW[k].seat));
 
 // ─── stav ───
-const P = { hlaska: null, hlava: null, oci: null, usta: null, sipka: null, drobne: null, barva: '#ffffff', cara: 6, its: 'uvnitr' };
+const P = { hlaska: null, hlava: null, oci: null, usta: null, sipka: null, drobne: null, barva: '#003de5', cara: 6, its: 'uvnitr', layout: 'novy' };
 let HLASKY = DEFAULT_HLASKY;
 let seed, R, logoHref = null, U = null, face = null;
 const moved = {}; // ruční posuny doodles (do další varianty)
@@ -211,8 +217,45 @@ function drawBackground(photo) {
 }
 
 // ─── pevná část: logo, podtitul, U ───
+// text vycentrovaný na x a zmenšený/zvětšený přesně na šířku w (rozměry z návrhu)
+function textFit(g, str, x, y, w, attrs) {
+  const t = el('text', { x, y, 'text-anchor': 'middle', 'font-family': 'Moniak', 'font-size': 100, ...attrs }, g);
+  t.textContent = str;
+  const len = t.getComputedTextLength() || w;
+  t.setAttribute('font-size', f1(100 * w / len));
+  return t;
+}
+function uPath(x1, x2, top, bottom, stem) {
+  const ro = (x2 - x1) / 2, ri = ro - stem, cy = bottom - ro;
+  return `M${x1} ${top}V${cy}A${ro} ${ro} 0 0 0 ${x2} ${cy}V${top}H${x2 - stem}V${cy}A${ri} ${ri} 0 0 1 ${x1 + stem} ${cy}V${top}Z`;
+}
+function setU(x1, x2, top, bottom, stem) {
+  const in1 = x1 + stem, in2 = x2 - stem, inBot = bottom - stem, cx = (x1 + x2) / 2;
+  U = { x1, x2, y1: top, y2: bottom, cx, stem, in1, in2, inBot };
+  face = { cx, cy: top + (inBot - top) * 0.55, rx: (in2 - in1) * 0.4 };
+  face.ry = face.rx * 1.32;
+}
 function drawFixed(g, defs) {
-  // logo: bílé LOGO.png ztlumené do světle šedé s jemným stínem, jako ražba ve stříbře
+  if (P.layout === 'puvodni') return drawFixedPuvodni(g, defs);
+  // Rozvržení podle návrhu z 15. 10.: logo i U jen tónované ve stříbře, „It's all about“ nahoře uvnitř U,
+  // modrý podtitul pod písmenem. Rozměry odměřené z návrhu (×2,599 do jednotek obálky).
+  if (logoHref) {
+    // logo jako tmavší tón stříbra; v nálepce „mag“ zůstanou písmena prosvítat
+    const fl = el('filter', { id: 'ton', x: 0, y: 0, width: '100%', height: '100%' }, defs);
+    el('feColorMatrix', { in: 'SourceGraphic', type: 'matrix', values: '0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.13 0' }, fl);
+    el('image', { href: logoHref, x: FRONT, y: BLEED, width: 2480, height: 595, filter: 'url(#ton)' }, g);
+  }
+  const ug = el('linearGradient', { id: 'uTon', x1: 1, y1: 0, x2: 0, y2: 1 }, defs);
+  [[0, 0.2], [0.5, 0.07], [1, 0.015]].forEach(([o, a]) => el('stop', { offset: o, 'stop-color': '#000', 'stop-opacity': a }, ug));
+  const x1 = 2997, x2 = 4689, top = 964, bottom = 3153, stem = 330;
+  el('path', { fill: 'url(#uTon)', d: uPath(x1, x2, top, bottom, stem) }, g);
+  setU(x1, x2, top, bottom, stem);
+  if (P.its !== 'skryt') textFit(g, 'It’s all about', 3900, 1047, 730, { 'font-weight': 300, fill: '#000', 'fill-opacity': 0.27 });
+  textFit(g, 'Novinky v celoživotním vzdělávání', 3836, 3413, 1037, { 'font-weight': 500, fill: '#003de5' });
+  textFit(g, 'ročenka 2026', 3837, 3488, 398, { 'font-weight': 400, fill: '#003de5' });
+}
+// první návrh: tmavé U s přechodem, „It's all about“ na tři řádky, podtitul pod logem
+function drawFixedPuvodni(g, defs) {
   if (logoHref) {
     const fl = el('filter', { id: 'razba', x: '-5%', y: '-5%', width: '110%', height: '120%' }, defs);
     el('feColorMatrix', { in: 'SourceGraphic', type: 'matrix', values: '0 0 0 0 0.86  0 0 0 0 0.86  0 0 0 0 0.86  0 0 0 1 0', result: 'svetla' }, fl);
@@ -224,21 +267,12 @@ function drawFixed(g, defs) {
   }
   el('text', { x: 3894, y: 852, 'text-anchor': 'middle', 'font-family': 'Moniak', 'font-weight': 400, 'font-size': 64, fill: '#1d1d1b' }, g).textContent = 'Novinky v celoživotním vzdělávání';
   el('text', { x: 3894, y: 950, 'text-anchor': 'middle', 'font-family': 'Moniak', 'font-weight': 500, 'font-size': 52, 'letter-spacing': 6, fill: '#1d1d1b' }, g).textContent = 'ROČENKA 2026';
-  // velké U s přechodem jako v návrhu
   const ug = el('linearGradient', { id: 'uGrad', x1: 1, y1: 0, x2: 0, y2: 1 }, defs);
   [[0, '#0d0d0d'], [0.45, '#4a4a4a'], [1, '#b9b9b9']].forEach(([o, c]) => el('stop', { offset: o, 'stop-color': c }, ug));
-  // rozměry písmene odměřené z návrhu: tahy 325, dole půlkruh
   const x1 = 3067, x2 = 4704, top = 1079, bottom = 3197, stem = 325;
-  const ro = (x2 - x1) / 2, ri = ro - stem, cx = (x1 + x2) / 2, cy = bottom - ro;
-  el('path', { fill: 'url(#uGrad)', d: `M${x1} ${top}V${cy}A${ro} ${ro} 0 0 0 ${x2} ${cy}V${top}H${x2 - stem}V${cy}A${ri} ${ri} 0 0 1 ${x1 + stem} ${cy}V${top}Z` }, g);
-  // místo pro obličej = vnitřek písmene
-  const in1 = x1 + stem, in2 = x2 - stem, inBot = bottom - stem;
-  U = { x1, x2, y1: top, y2: bottom, cx, stem, in1, in2, inBot };
-  face = { cx, cy: top + (inBot - top) * 0.55, rx: (in2 - in1) * 0.4 };
-  face.ry = face.rx * 1.32;
-  if (P.its === 'uvnitr') {
-    ['It’s', 'all', 'about'].forEach((t, i) => el('text', { x: cx, y: 1689 + i * 221, 'text-anchor': 'middle', 'font-family': 'Moniak', 'font-weight': 400, 'font-size': 175, fill: '#8d8d8d' }, g).textContent = t);
-  }
+  el('path', { fill: 'url(#uGrad)', d: uPath(x1, x2, top, bottom, stem) }, g);
+  setU(x1, x2, top, bottom, stem);
+  if (P.its !== 'skryt') ['It’s', 'all', 'about'].forEach((t, i) => el('text', { x: U.cx, y: 1689 + i * 221, 'text-anchor': 'middle', 'font-family': 'Moniak', 'font-weight': 400, 'font-size': 175, fill: '#8d8d8d' }, g).textContent = t);
 }
 
 // ─── doodles ───
@@ -268,7 +302,8 @@ function wrap(text) {
 }
 function drawDoodles(g) {
   boxes.length = 0;
-  boxes.push({ x1: FRONT, x2: W, y1: 0, y2: 1000 }); // logo a podtitul
+  if (P.layout === 'puvodni') boxes.push({ x1: FRONT, x2: W, y1: 0, y2: 1000 }); // logo a podtitul
+  else boxes.push({ x1: FRONT, x2: W, y1: 0, y2: 760 }, { x1: 3450, x2: 4350, y1: 900, y2: 1080 }, { x1: 3250, x2: 4420, y1: 3330, y2: 3520 });
   const text = P.hlaska !== null && HLASKY[P.hlaska] ? HLASKY[P.hlaska] : pick(HLASKY);
   const low = text.toLocaleLowerCase('cs');
   const tags = [...new Set(TEMATA.filter(([re]) => re.test(low)).flatMap(([, ids]) => ids))];
@@ -289,15 +324,19 @@ function drawDoodles(g) {
     const d = Ruka.DRAW[hlava], st = d.strokes(), bb = Ruka.bbox(st), w = fw * (hlava === 'party' ? 0.55 : hlava === 'svatozar' ? 0.95 : 0.85), k = w / bb.w;
     const yBottom = face.cy - face.ry * (hlava === 'svatozar' ? 1.0 : 0.72);
     const y = yBottom - bb.h * k / 2;
-    boxes.push(place(g, 'hlava', hlava, face.cx + rnd(-30, 30), y, w, rnd(-8, 8)));
+    boxes.push(place(g, 'hlava', hlava, face.cx + rnd(-40, 40), y, w, rnd(-16, 16)));
   }
-  if (oci) boxes.push(place(g, 'oci', oci, face.cx, face.cy - face.ry * 0.12, fw * 1.05, rnd(-4, 4)));
-  if (usta) boxes.push(place(g, 'usta', usta, face.cx, face.cy + face.ry * 0.4, fw * 0.62, rnd(-5, 5)));
+  if (oci) boxes.push(place(g, 'oci', oci, face.cx, face.cy - face.ry * 0.12, fw * 1.05, rnd(-8, 8)));
+  if (usta) boxes.push(place(g, 'usta', usta, face.cx, face.cy + face.ry * 0.4, fw * 0.62, rnd(-10, 10)));
   // obličej sám je taky obsazený
   boxes.push({ x1: face.cx - face.rx, x2: face.cx + face.rx, y1: face.cy - face.ry, y2: face.cy + face.ry });
 
   // hláška vlevo nebo vpravo od vnitřku U, případně pod písmenem
   const lt = Ruka.letter(wrap(text), R, { cap: 78, align: 'left' });
+  const capRot = (chance(0.5) ? 1 : -1) * rnd(6, 17);
+  const cr = Math.abs(capRot) * Math.PI / 180;
+  const rw = lt.w * Math.cos(cr) + lt.h * Math.sin(cr), rh = lt.w * Math.sin(cr) + lt.h * Math.cos(cr);
+  const rbox = p => { const cx = p.x + lt.w / 2, cy = p.y + lt.h / 2; return { x1: cx - rw / 2, x2: cx + rw / 2, y1: cy - rh / 2, y2: cy + rh / 2 }; };
   const slots = shuffle([
     () => ({ x: U.in1 + 70 - lt.w, y: rnd(U.y1 + 250, U.inBot - lt.h - 100) }),
     () => ({ x: U.in2 - 70, y: rnd(U.y1 + 250, U.inBot - lt.h - 100) }),
@@ -306,13 +345,14 @@ function drawDoodles(g) {
   let cap = null;
   for (const s of slots) {
     for (let t = 0; t < 6 && !cap; t++) {
-      const p = s(), b = { x1: p.x, x2: p.x + lt.w, y1: p.y, y2: p.y + lt.h };
+      const p = s(), b = rbox(p);
       if (free(b, 30)) cap = { ...p, b };
     }
     if (cap) break;
   }
-  if (!cap) { const p = { x: Math.max(TRIM_L, U.in1 + 70 - lt.w), y: U.y1 + 300 }; cap = { ...p, b: { x1: p.x, x2: p.x + lt.w, y1: p.y, y2: p.y + lt.h } }; }
-  doodle(g, 'hlaska', lt.strokes, cap.x, cap.y, 1, 0);
+  if (!cap) { const p = { x: Math.max(TRIM_L, U.in1 + 70 - lt.w), y: U.y1 + 300 }; cap = { ...p, b: rbox(p) }; }
+  // otáčí se kolem středu textu
+  doodle(g, 'hlaska', Ruka.move(lt.strokes, -lt.w / 2, -lt.h / 2), cap.x + lt.w / 2, cap.y + lt.h / 2, 1, capRot);
   boxes.push(cap.b);
 
   // šipka od hlášky k obličeji, občas se smyčkou
@@ -322,6 +362,8 @@ function drawDoodles(g) {
     const S = [mid[0] + Math.cos(ang) * (b.x2 - b.x1) * 0.55, mid[1] + Math.sin(ang) * (b.y2 - b.y1) * 0.6 + 40];
     const E = [face.cx - Math.cos(ang) * face.rx * 1.08, face.cy - Math.sin(ang) * face.ry * 0.6];
     const M = [(S[0] + E[0]) / 2 + rnd(-60, 60), (S[1] + E[1]) / 2 + rnd(60, 140)];
+    // hláška hned u obličeje: krátká šipka by vypadala jako háček, tak žádná
+    if (Math.hypot(E[0] - S[0], E[1] - S[1]) < 380) return;
     const loop = chance(0.5);
     let st = Ruka.join(Ruka.bez(S, [S[0] + (M[0] - S[0]) * 0.3, S[1] + 120], [M[0] - 80, M[1] + 40], M, 10));
     if (loop) st = Ruka.join(st, Ruka.arc(M[0], M[1] - 46, 46, 46, 90, 450, 20));
@@ -343,11 +385,14 @@ function drawDoodles(g) {
   for (const id of pool) {
     if (placed >= n) break;
     const w = 300 * (Ruka.DRAW[id].size / 250) * rnd(0.85, 1.15);
-    for (const [sx, sy] of spots) {
-      const bb = Ruka.bbox(Ruka.DRAW[id].strokes()), h = bb.h * w / bb.w;
-      const b = { x1: sx - w / 2, x2: sx + w / 2, y1: sy - h / 2, y2: sy + h / 2 };
+    for (const [bx, by] of spots) {
+      const sx = bx + rnd(-150, 150), sy = by + rnd(-150, 150), rot = (chance(0.5) ? 1 : -1) * rnd(8, 35);
+      const bb = Ruka.bbox(Ruka.DRAW[id].strokes()), h = bb.h * w / bb.w, a = Math.abs(rot) * Math.PI / 180;
+      const ow = w * Math.cos(a) + h * Math.sin(a), oh = w * Math.sin(a) + h * Math.cos(a);
+      const b = { x1: sx - ow / 2, x2: sx + ow / 2, y1: sy - oh / 2, y2: sy + oh / 2 };
       if (!free(b)) continue;
-      boxes.push(place(g, 'd' + placed, id, sx, sy, w, rnd(-14, 14)));
+      place(g, 'd' + placed, id, sx, sy, w, rot);
+      boxes.push(b);
       placed++;
       break;
     }
@@ -386,6 +431,8 @@ function sync() {
   $('caraOut').textContent = P.cara;
   $('drobneOut').textContent = P.drobne === null ? 'náhodně' : P.drobne;
   video.style.opacity = $('sila').value / 100;
+  $('zoomOut').textContent = $('zoom').value + ' %';
+  video.style.transform = `scaleX(-1) scale(${$('zoom').value / 100})`;
   video.style.filter = `grayscale(1) contrast(1.15) brightness(1.3) blur(${(1.5 - $('sila').value / 100).toFixed(2)}px)`;
 }
 
@@ -461,7 +508,8 @@ async function exportPng() {
     c.globalCompositeOperation = 'multiply';
     c.filter = `grayscale(1) contrast(1.15) brightness(1.3) blur(${(4 - $('sila').value / 40).toFixed(1)}px)`;
     c.beginPath(); c.rect(FRONT, 0, tw, th); c.clip();
-    c.translate(FRONT + tw, 0); c.scale(-1, 1);
+    const z = $('zoom').value / 100;
+    c.translate(FRONT + tw / 2, th / 2); c.scale(-z, z); c.translate(-tw / 2, -th / 2);
     c.drawImage(video, (tw - vw * s) / 2, (th - vh * s) / 2, vw * s, vh * s);
     c.restore();
   }
@@ -511,10 +559,11 @@ function bindPanel() {
   on('cislo', 'change', e => { const v = parseInt(e.target.value, 10); if (Number.isFinite(v)) generate(v); });
   on('kamera', 'click', toggleCamera);
   on('sila', 'input', sync);
+  on('zoom', 'input', sync);
   on('zona', 'change', () => generate(seed));
   on('hlaska', 'change', e => { P.hlaska = e.target.value === '' ? null : +e.target.value; generate(seed); e.target.blur(); });
-  [['hlavaSel', 'hlava'], ['ociSel', 'oci'], ['ustaSel', 'usta'], ['sipkaSel', 'sipka'], ['itsSel', 'its']].forEach(([id, k]) =>
-    on(id, 'change', e => { P[k] = e.target.value || (k === 'its' ? 'uvnitr' : null); generate(seed); e.target.blur(); }));
+  [['hlavaSel', 'hlava'], ['ociSel', 'oci'], ['ustaSel', 'usta'], ['sipkaSel', 'sipka'], ['itsSel', 'its'], ['layoutSel', 'layout']].forEach(([id, k]) =>
+    on(id, 'change', e => { P[k] = e.target.value || (k === 'its' ? 'uvnitr' : k === 'layout' ? 'novy' : null); generate(seed); e.target.blur(); }));
   on('drobne', 'input', e => { P.drobne = +e.target.value; generate(seed); });
   on('barva', 'change', e => { P.barva = e.target.value; generate(seed); e.target.blur(); });
   on('cara', 'input', e => { P.cara = +e.target.value; generate(seed); });
